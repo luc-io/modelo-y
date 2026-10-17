@@ -1,0 +1,28 @@
+name: Sugerencia o crítica al modelo
+description: Algo del método, de los datos o de la validación que se podría hacer mejor
+labels: ["sugerencia"]
+body:
+  - type: dropdown
+    id: tema
+    attributes:
+      label: Tema
+      options:
+        - Predictores o retardos
+        - Lluvia y pronóstico meteorológico
+        - Bandas de error y validación
+        - Datos (fuentes, calidad, huecos)
+        - Otro
+    validations:
+      required: true
+  - type: textarea
+    id: que
+    attributes:
+      label: Qué proponés y por qué
+      description: Si hay bibliografía, datos o un caso concreto (una fecha en que el modelo erró), mejor.
+    validations:
+      required: true
+  - type: input
+    id: quien
+    attributes:
+      label: Filiación (opcional)
+      description: Institución o área, si querés que la tengamos en cuenta al leerlo.

@@ -1,0 +1,15 @@
+cff-version: 1.2.0
+message: "Si usás Y, citalo así."
+title: "Y: modelo estadístico de la altura del Paraná en Rosario"
+type: software
+authors:
+  - alias: luc-io
+license: MIT
+url: "https://alturario.hoy.net.ar/modelo"
+repository-code: "https://github.com/luc-io/modelo-y"
+date-released: 2026-10-17
+keywords:
+  - hidrología
+  - río Paraná
+  - pronóstico de altura
+  - regresión con retardos

@@ -1,0 +1,20 @@
+{
+  "name": "modelo-y",
+  "version": "1.0.0",
+  "description": "Y: modelo estadístico de la altura del Paraná en Rosario a 3-14 días, con datos abiertos",
+  "private": true,
+  "license": "MIT",
+  "scripts": {
+    "tipos": "tsc --noEmit",
+    "margen": "tsx scripts/margen-rio.ts",
+    "ajuste-lluvia": "tsx scripts/ajuste-lluvia-rio.ts",
+    "prueba-lluvia": "tsx scripts/prueba-lluvia.ts",
+    "prueba-pronostico": "MODO=pronostico tsx scripts/prueba-lluvia.ts",
+    "prueba-terminos": "MODO=terminos tsx scripts/prueba-lluvia.ts"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.5.0"
+  }
+}
