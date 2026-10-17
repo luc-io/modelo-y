@@ -34,7 +34,20 @@ export interface ModeloRio {
    * el pronóstico real de ECMWF desde febrero de 2024.
    */
   lluvia?: true;
+  /**
+   * Suma lo que suelta Yacyretá (caudal efluente, `SERIE_YACYRETA`): cuánto
+   * cambió en los últimos 3 días, en decenas de miles de m³/s. Esa agua pasa
+   * por Corrientes días después, así que deja ver la onda antes y llegar a 17
+   * días. Sólo el cambio y no el nivel: el nivel repite lo que ya dice
+   * Corrientes y entraba con signo negativo, que con un dato de Corrientes
+   * atrasado daba cualquier cosa; sin él se pierde 1 cm a 14 días. Sus bandas
+   * y sesgos son `BANDAS_REPRESA` y `SESGOS_REPRESA`.
+   */
+  represa?: true;
 }
+
+/** Serie del INA con el caudal efluente de Yacyretá, en m³/s. Va en `series` con la clave `yacyreta`. */
+export const SERIE_YACYRETA = 937;
 
 /** Días que tarda el agua en llegar de cada estación a Rosario. */
 export const RETARDOS: Record<string, number> = {
@@ -112,6 +125,32 @@ export const MODELOS_LLUVIA: ModeloRio[] = [
 ];
 
 /**
+ * Con la lluvia del tramo y Yacyretá: 14 días, y 17, que sin Yacyretá no se
+ * puede. A 7 y 10 días Yacyretá no mejora de forma pareja entre períodos, así
+ * que ahí queda sólo la lluvia. Ajustados y medidos como `MODELOS_LLUVIA`,
+ * con `npm run ajuste-lluvia-rio`. A 17 días ninguna estación alcanza: usa
+ * Corrientes de hoy.
+ */
+export const MODELOS_REPRESA: ModeloRio[] = [
+  {
+    horizonte: 14,
+    usa: ['corrientes'],
+    coef: [-0.264111, 0.589214, 0.358292, 0.069891, 0.389337, 0.238996, 0.298557],
+    mae: 0.233,
+    lluvia: true,
+    represa: true,
+  },
+  {
+    horizonte: 17,
+    usa: ['corrientes'],
+    coef: [-0.299244, 0.528701, 0.404707, 0.089686, 0.489862, 0.24362, 0.326772],
+    mae: 0.28,
+    lluvia: true,
+    represa: true,
+  },
+];
+
+/**
  * Percentiles 10 y 90 del error (pronosticado - real), en metros, por
  * horizonte y por régimen de Corrientes: entre los dos queda lo real 8 de cada
  * 10 veces. Reemplazan al ± del error absoluto medio, que era simétrico y
@@ -167,6 +206,25 @@ export const SESGOS_LLUVIA: Record<number, Record<Regimen, number>> = {
   14: { sube: -0.1, baja: 0.1, resto: 0.03 },
 };
 
+/** Como `BANDAS_LLUVIA`, para `MODELOS_REPRESA`. */
+export const BANDAS_REPRESA: Record<number, Record<Regimen, [number, number]>> = {
+  14: { sube: [-0.5, 0.15], baja: [-0.23, 0.47], resto: [-0.38, 0.38] },
+  17: { sube: [-0.62, 0.31], baja: [-0.31, 0.49], resto: [-0.45, 0.46] },
+};
+
+/** Como `SESGOS_LLUVIA`, para `MODELOS_REPRESA`. */
+export const SESGOS_REPRESA: Record<number, Record<Regimen, number>> = {
+  14: { sube: -0.13, baja: 0.12, resto: 0.01 },
+  17: { sube: -0.09, baja: 0.12, resto: 0.02 },
+};
+
+/** Las bandas y sesgos que corresponden a un modelo. */
+function tablas(m: ModeloRio) {
+  if (m.represa) return { bandas: BANDAS_REPRESA, sesgos: SESGOS_REPRESA };
+  if (m.lluvia) return { bandas: BANDAS_LLUVIA, sesgos: SESGOS_LLUVIA };
+  return { bandas: BANDAS, sesgos: SESGOS };
+}
+
 export interface Punto {
   /**
    * Día en que el río estaría a esa altura, a la mañana. El modelo predice el
@@ -212,7 +270,7 @@ const enDia = (s: Observacion[], dia: string) => s.find((o) => o.dia === dia)?.m
  * viene el río arriba no es motivo para achicar el margen.
  */
 function banda(m: ModeloRio, r: Regimen | null): [number, number] {
-  const b = (m.lluvia ? BANDAS_LLUVIA : BANDAS)[m.horizonte];
+  const b = tablas(m).bandas[m.horizonte];
   if (r) return [-b[r][1], -b[r][0]];
   return [-Math.max(...REGIMENES.map((k) => b[k][1])), -Math.min(...REGIMENES.map((k) => b[k][0]))];
 }
@@ -255,11 +313,19 @@ export function predictores(
   for (const k of m.usa) {
     const s = series[k];
     if (!s) return null;
-    const dia = menosDias(hoy, RETARDOS[k] - m.horizonte);
+    // Más allá del retraso de la estación (17 días desde Corrientes), su dato de hoy.
+    const dia = menosDias(hoy, Math.max(0, RETARDOS[k] - m.horizonte));
     const nivel = enDia(s, dia);
     const antes = enDia(s, menosDias(dia, 3));
     if (nivel === null || antes === null) return null;
     x.push(nivel, nivel - antes);
+  }
+  if (m.represa) {
+    const s = series.yacyreta ?? [];
+    const ahora = enDia(s, hoy);
+    const antes = enDia(s, menosDias(hoy, 3));
+    if (ahora === null || antes === null) return null;
+    x.push((ahora - antes) / 10_000);
   }
   if (m.lluvia) {
     const pasada = lluvia?.pasada(hoy) ?? null;
@@ -287,19 +353,30 @@ export function predecir(
   if (crudo === null) return null;
   const regimen = regimenCorrientes(series.corrientes ?? [], hoy);
   const b = banda(m, regimen);
-  const metros = crudo - (regimen ? (m.lluvia ? SESGOS_LLUVIA : SESGOS)[m.horizonte][regimen] : 0);
+  const metros = crudo - (regimen ? tablas(m).sesgos[m.horizonte][regimen] : 0);
   const r = (v: number) => Number(v.toFixed(2));
   return { dia: menosDias(hoy, 1 - m.horizonte), metros: r(metros), min: r(crudo + b[0]), max: r(crudo + b[1]) };
 }
 
 /**
- * Los cinco horizontes, saltando los que no se pueden calcular. Desde 7 días
- * usa el modelo con lluvia si hay lluvia del tramo; si no la hay (Open-Meteo
- * no respondió), el de siempre con su banda de siempre.
+ * Todos los horizontes, saltando los que no se pueden calcular. Con lluvia del
+ * tramo, a 14 y 17 días usa también Yacyretá; a 7 y 10, sólo la lluvia. Si
+ * falta Yacyretá, el de lluvia; si falta la lluvia (Open-Meteo no respondió),
+ * el de siempre con su banda de siempre, y 17 días no sale.
  */
 export function pronosticar(series: Record<string, Observacion[]>, hoy: string, lluvia?: LluviaTramo | null): Punto[] {
-  return MODELOS.map((m) => {
-    const conLluvia = lluvia ? MODELOS_LLUVIA.find((x) => x.horizonte === m.horizonte) : undefined;
-    return (conLluvia && predecir(series, hoy, conLluvia, lluvia)) || predecir(series, hoy, m);
-  }).filter((p): p is Punto => p !== null);
+  const horizontes = [...new Set([...MODELOS, ...MODELOS_REPRESA].map((m) => m.horizonte))].sort((a, b) => a - b);
+  return horizontes
+    .map((h) => {
+      // Del más completo al más simple: si a uno le falta un dato, el siguiente.
+      const candidatos = lluvia
+        ? [MODELOS_REPRESA, MODELOS_LLUVIA, MODELOS].map((ms) => ms.find((x) => x.horizonte === h))
+        : [MODELOS.find((x) => x.horizonte === h)];
+      for (const m of candidatos) {
+        const p = m && predecir(series, hoy, m, lluvia);
+        if (p) return p;
+      }
+      return null;
+    })
+    .filter((p): p is Punto => p !== null);
 }

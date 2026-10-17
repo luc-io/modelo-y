@@ -10,7 +10,9 @@
     "ajuste-lluvia": "tsx scripts/ajuste-lluvia-rio.ts",
     "prueba-lluvia": "tsx scripts/prueba-lluvia.ts",
     "prueba-pronostico": "MODO=pronostico tsx scripts/prueba-lluvia.ts",
-    "prueba-terminos": "MODO=terminos tsx scripts/prueba-lluvia.ts"
+    "prueba-terminos": "MODO=terminos tsx scripts/prueba-lluvia.ts",
+    "prueba-represas": "tsx scripts/prueba-represas.ts",
+    "prueba-represas-lluvia": "tsx scripts/prueba-represas-lluvia.ts"
   },
   "devDependencies": {
     "@types/node": "^20.0.0",
