@@ -5,7 +5,7 @@ type: software
 authors:
   - alias: luc-io
 license: MIT
-url: "https://alturario.hoy.net.ar/modelo"
+url: "https://alturario.hoy.net.ar/modelo-y"
 repository-code: "https://github.com/luc-io/modelo-y"
 date-released: 2026-10-17
 keywords:
