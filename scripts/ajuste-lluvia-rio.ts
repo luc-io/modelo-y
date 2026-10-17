@@ -23,9 +23,13 @@ import { join } from 'node:path';
 import { traerSerie, estacionRio, menosDias, type Observacion } from '../src/lib/rio-historia';
 import {
   BANDAS,
+  BANDAS_LLUVIA,
   MODELOS,
+  MODELOS_LLUVIA,
   REGIMENES,
+  SERIE_YACYRETA,
   SESGOS,
+  SESGOS_LLUVIA,
   predictores,
   regimenCorrientes,
   regresion,
@@ -55,13 +59,12 @@ async function json<T>(archivo: string, url: string): Promise<T> {
   }
 }
 
-async function serieRio(slug: string): Promise<Observacion[]> {
+async function serieRio(slug: string, id = estacionRio(slug)!.serie): Promise<Observacion[]> {
   const archivo = join(CACHE, `rio-${slug}-${hoy}.json`);
   if (existsSync(archivo)) return JSON.parse(readFileSync(archivo, 'utf8'));
-  const e = estacionRio(slug)!;
   for (let i = 0; ; i++) {
     try {
-      const s = await traerSerie(e.serie, '2004-11-01', hoy);
+      const s = await traerSerie(id, '2004-11-01', hoy);
       writeFileSync(archivo, JSON.stringify(s));
       await esperar(1500);
       return s;
@@ -296,6 +299,78 @@ async function main() {
     );
   }
 
+  // Con Yacyretá: 14 días (contra el de lluvia que está en producción) y 17
+  // (que no existía: contra la persistencia, que el río se quede como está).
+  console.error('Yacyretá efluente…');
+  series.yacyreta = await serieRio('yacyreta', SERIE_YACYRETA);
+  const modelosR: ModeloRio[] = [];
+  const bandasR: Record<number, Record<Regimen, [number, number]>> = {};
+  const sesgosR: Record<number, Record<Regimen, number>> = {};
+  const tablaR: string[] = [];
+  for (const h of [14, 17]) {
+    const sin = MODELOS.find((m) => m.horizonte === h);
+    const molde: ModeloRio = { horizonte: h, usa: sin?.usa ?? ['corrientes'], coef: [], mae: 0, lluvia: true, represa: true };
+    const real = (d: string) => rosario.get(menosDias(d, -h));
+    const X: number[][] = [];
+    const y: number[] = [];
+    for (let d = '2005-01-01'; d <= '2021-12-31'; d = menosDias(d, -1)) {
+      const r = real(d);
+      const x = predictores(series, d, molde, lluviaAjuste);
+      if (r === undefined || x === null) continue;
+      X.push(x);
+      y.push(r);
+    }
+    const modelo: ModeloRio = { ...molde, coef: ajustar(X, y).map(r6) };
+    const enProduccion = MODELOS_LLUVIA.find((m) => m.horizonte === h);
+    const dias: { real: number; con: number; antes: number | null; persiste: number; regimen: Regimen }[] = [];
+    for (let d = DESDE_PRUEBA; d <= hoy; d = menosDias(d, -1)) {
+      const r = real(d);
+      const con = regresion(series, d, modelo, lluviaPrueba);
+      const antes = enProduccion ? regresion(series, d, enProduccion, lluviaPrueba) : null;
+      const regimen = regimenCorrientes(series.corrientes, d);
+      const persiste = rosario.get(d);
+      if (r === undefined || con === null || (enProduccion && antes === null) || !regimen || persiste === undefined) continue;
+      dias.push({ real: r, con, antes, persiste, regimen });
+    }
+    const errores = dias.map((x) => x.con - x.real);
+    modelo.mae = Number((errores.reduce((a, e) => a + Math.abs(e), 0) / errores.length).toFixed(3));
+    modelosR.push(modelo);
+    bandasR[h] = {} as Record<Regimen, [number, number]>;
+    sesgosR[h] = {} as Record<Regimen, number>;
+    for (const rg of REGIMENES) {
+      const xs = dias.filter((x) => x.regimen === rg).map((x) => x.con - x.real);
+      bandasR[h][rg] = [r2(percentil(xs, 0.1)), r2(percentil(xs, 0.9))];
+      sesgosR[h][rg] = r2(percentil(xs, 0.5));
+    }
+    const medir = (crudo: (x: (typeof dias)[number]) => number, B: typeof BANDAS, S: typeof SESGOS) => {
+      let abs = 0;
+      let dentro = 0;
+      let ancho = 0;
+      for (const x of dias) {
+        const c = crudo(x);
+        const [p10, p90] = B[h][x.regimen];
+        abs += Math.abs(c - S[h][x.regimen] - x.real);
+        if (x.real >= c - p90 && x.real <= c - p10) dentro++;
+        ancho += p90 - p10;
+      }
+      return { mae: abs / dias.length, cubre: dentro / dias.length, ancho: ancho / dias.length };
+    };
+    const despues = medir((x) => x.con, bandasR, sesgosR);
+    if (enProduccion) {
+      const antes = medir((x) => x.antes!, BANDAS_LLUVIA, SESGOS_LLUVIA);
+      tablaR.push(
+        `| ${h} (antes: con lluvia) | ${dias.length} | ${antes.mae.toFixed(3)} | ${despues.mae.toFixed(3)} | ${Math.round((despues.mae / antes.mae - 1) * 100)} % ` +
+          `| ${Math.round(antes.ancho * 100)} cm | ${Math.round(despues.ancho * 100)} cm | ${Math.round(antes.cubre * 100)} % | ${Math.round(despues.cubre * 100)} % |`,
+      );
+    } else {
+      const persiste = dias.reduce((a, x) => a + Math.abs(x.persiste - x.real), 0) / dias.length;
+      tablaR.push(
+        `| ${h} (antes: no había; contra persistencia) | ${dias.length} | ${persiste.toFixed(3)} | ${despues.mae.toFixed(3)} | ${Math.round((despues.mae / persiste - 1) * 100)} % ` +
+          `| — | ${Math.round(despues.ancho * 100)} cm | — | ${Math.round(despues.cubre * 100)} % |`,
+      );
+    }
+  }
+
   console.log(`\nexport const CLIMA_TRAMO: number[] = ${JSON.stringify(clima)};\n`);
   console.log(`export const MODELOS_LLUVIA: ModeloRio[] = ${JSON.stringify(modelos, null, 2)};\n`);
   console.log(`export const BANDAS_LLUVIA = ${JSON.stringify(bandas)};\n`);
@@ -304,6 +379,13 @@ async function main() {
   console.log('| Días | n | Error antes | Error después | Cambio | Banda antes | Banda después | Cubre antes | Cubre después |');
   console.log('|---|---|---|---|---|---|---|---|---|');
   console.log(tabla.join('\n'));
+  console.log(`\nexport const MODELOS_REPRESA: ModeloRio[] = ${JSON.stringify(modelosR, null, 2)};\n`);
+  console.log(`export const BANDAS_REPRESA = ${JSON.stringify(bandasR)};\n`);
+  console.log(`export const SESGOS_REPRESA = ${JSON.stringify(sesgosR)};\n`);
+  console.log('Con Yacyretá, mismos días:\n');
+  console.log('| Días | n | Error antes | Error después | Cambio | Banda antes | Banda después | Cubre antes | Cubre después |');
+  console.log('|---|---|---|---|---|---|---|---|---|');
+  console.log(tablaR.join('\n'));
 }
 
 main().catch((e) => {

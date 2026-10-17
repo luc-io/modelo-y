@@ -1,6 +1,6 @@
 # Metodología de Y
 
-Modelo estadístico de la altura del río Paraná en Rosario a 3, 5, 7, 10 y 14 días. Versión del 17 de octubre de 2026.
+Modelo estadístico de la altura del río Paraná en Rosario a 3, 5, 7, 10, 14 y 17 días. Versión del 17 de octubre de 2026, con Yacyretá.
 
 Este documento describe qué hace el modelo, cómo se ajustó y cómo se midió, incluidas las pruebas que no mejoraron nada. Al final hay preguntas abiertas donde una mirada especializada sería lo más útil.
 
@@ -21,6 +21,8 @@ Este documento describe qué hace el modelo, cómo se ajustó y cómo se midió,
 
 Los retrasos se eligieron maximizando la correlación entre cada estación desplazada y Rosario sobre diez años; las correlaciones dan entre 0,93 y 0,99.
 
+**Represas.** Caudal efluente diario de Yacyretá, serie 937 del INA (desde 1994, 99 % de los días desde 2005), en m³/s. Para las pruebas, también la vazão defluente diaria de Itaipú del ONS (`dados_hidrologicos_di`, reservatorio `PNITAI`, CC BY 4.0, desde 2000). Los dos se publican al día siguiente.
+
 **Lluvia.** Promedio de seis puntos sobre los afluentes del tramo argentino entre Corrientes y Rosario: (−61,0; −31,0), (−61,5; −29,5), (−60,0; −28,5), (−58,8; −29,5), (−59,3; −31,0), (−58,0; −28,5), en lon/lat. Cubren el Salado santafesino, el norte de Santa Fe y el sureste del Chaco por la derecha, y Corrientes y el norte de Entre Ríos (ríos Corriente, Feliciano y Guayquiraró) por la izquierda.
 
 - Para ajustar: ERA5 diario (precipitación acumulada, día local de Buenos Aires), vía el archivo de Open-Meteo.
@@ -35,11 +37,13 @@ Para cada plazo *h* hay una regresión lineal distinta, ajustada por mínimos cu
 ```
 H_Rosario(t + h) = a + b · H_Rosario(t)
                  + Σ_k [ c_k · H_k(t − (r_k − h)) + d_k · (H_k(t − (r_k − h)) − H_k(t − (r_k − h) − 3)) ]
+                 + g · (Q_Yacy(t) − Q_Yacy(t − 3))             (sólo h ≥ 14)
                  + e · P_pasada(t) + f · P_futura(t, h)        (sólo h ≥ 7)
 ```
 
 - *t* es el último día con altura de Rosario.
-- *k* recorre las estaciones con retraso *r_k* ≥ *h*: las que todavía «alcanzan» a informar ese plazo. A 3 días son cinco (Corrientes a Paraná); a 14, sólo Corrientes.
+- *k* recorre las estaciones con retraso *r_k* ≥ *h*: las que todavía «alcanzan» a informar ese plazo. A 3 días son cinco (Corrientes a Paraná); a 14, sólo Corrientes. A 17 días no alcanza ninguna y entra Corrientes de hoy (el desplazamiento se acota en 0).
+- *Q_Yacy* es el caudal que suelta Yacyretá, en decenas de miles de m³/s. Entra sólo su cambio en 3 días, no su nivel (ver 4.4).
 - Para cada estación entran el nivel y su cambio en 3 días, en el día que corresponde a su retraso.
 - *P_pasada* es la lluvia del tramo en los 7 días hasta *t*.
 - *P_futura* es la lluvia pronosticada para los días *t+1* a *t+7*, más la típica de la época para *t+8* a *t+h*. Ambas van en decenas de mm.
@@ -50,9 +54,12 @@ H_Rosario(t + h) = a + b · H_Rosario(t)
 | 5 días | Corrientes, Goya, Reconquista, La Paz |
 | 7 días | Corrientes, Goya, Reconquista (+ lluvia) |
 | 10 días | Corrientes, Goya, Reconquista (+ lluvia) |
-| 14 días | Corrientes (+ lluvia) |
+| 14 días | Corrientes (+ lluvia + Yacyretá) |
+| 17 días | Corrientes de hoy (+ lluvia + Yacyretá) |
 
-Los coeficientes están en `src/lib/pronostico-rio.ts` (`MODELOS` y `MODELOS_LLUVIA`). Los de lluvia salen positivos en los tres plazos, como corresponde físicamente.
+Los coeficientes están en `src/lib/pronostico-rio.ts` (`MODELOS`, `MODELOS_LLUVIA` y `MODELOS_REPRESA`). Los de lluvia salen positivos en todos los plazos. En los modelos con Yacyretá, todos los coeficientes salvo la ordenada son positivos.
+
+Si en vivo falta un dato se usa el modelo más simple que se pueda calcular: sin Yacyretá, el de lluvia; sin lluvia, el de sólo estaciones (y 17 días no sale).
 
 **Corrección por régimen.** Se clasifica cada día según cuánto cambió Corrientes en los 10 días previos: *sube* (más de +40 cm), *baja* (menos de −15 cm) o *resto*. La regresión lineal se queda corta con crecidas rápidas y se pasa con bajantes. Por eso al número se le resta la mediana del error medida en cada régimen.
 
@@ -109,6 +116,22 @@ Banda p10/p90 del error con lluvia (m):
 | 7 | −0,46 / 0,11 | −0,18 / 0,35 | −0,27 / 0,24 |
 | 10 | −0,45 / 0,14 | −0,22 / 0,37 | −0,32 / 0,24 |
 | 14 | −0,55 / 0,22 | −0,27 / 0,46 | −0,37 / 0,43 |
+
+### Modelo con lluvia y Yacyretá (desde febrero de 2024, mismos días)
+
+| Plazo | n | Error antes | Error con Yacyretá | Cambio | Banda antes | Banda con Yacyretá | Cobertura |
+|---|---|---|---|---|---|---|---|
+| 14 | 903 | 0,240 m (con lluvia) | 0,216 m | −10 % | 76 cm | 71 cm | 80 % |
+| 17 | 900 | 0,412 m (persistencia) | 0,270 m | −34 % | — | 87 cm | 80 % |
+
+Banda p10/p90 del error con lluvia y Yacyretá (m):
+
+| Plazo | sube | baja | resto |
+|---|---|---|---|
+| 14 | −0,50 / 0,15 | −0,23 / 0,47 | −0,38 / 0,38 |
+| 17 | −0,62 / 0,31 | −0,31 / 0,49 | −0,45 / 0,46 |
+
+Como con la lluvia, estas bandas se midieron sobre los mismos días que la tabla anterior.
 
 ## 4. Lo que se probó para llegar a la lluvia
 
@@ -170,12 +193,47 @@ ERA5 se publica con unos 5 días de atraso. Opciones medidas con ECMWF desde feb
 
 La lluvia de la última semana se toma de lo que ECMWF pronosticó con un día de anticipación para cada día, algo que está disponible en vivo. La humedad del suelo mejoraba 1 a 3 mm y pedía una segunda fuente, así que quedó afuera.
 
+### 4.4 Represas
+
+Con el mismo protocolo, en `scripts/prueba-represas.ts` (2022-2026, sin lluvia) y `scripts/prueba-represas-lluvia.ts` (desde 2024, con ECMWF).
+
+**Retraso.** El cambio en 10 días del caudal se correlaciona con el de Rosario con picos débiles (r 0,24-0,28) a 15-16 días. Elegido por el error en el ajuste, el mejor retraso es siempre usar el último dato disponible. No hay retraso que afinar.
+
+**Sin lluvia, 2022-2026** (error medio, m):
+
+| Plazo | Persistencia | Sólo estaciones | + Yacyretá | + Itaipú | + las dos |
+|---|---|---|---|---|---|
+| 3 | 0,143 | 0,103 | 0,103 | 0,104 | 0,104 |
+| 7 | 0,251 | 0,196 | 0,196 | 0,197 | 0,196 |
+| 10 | 0,316 | 0,212 | 0,211 | 0,212 | 0,211 |
+| 14 | 0,400 | 0,278 | 0,265 | 0,276 | 0,265 |
+| 17 | 0,458 | 0,334 | 0,306 | 0,325 | 0,305 |
+| 21 | 0,527 | 0,393 | 0,366 | 0,384 | 0,366 |
+
+A 17 y 21 días, «sólo estaciones» es Rosario y Corrientes de hoy. Itaipú no suma sobre Yacyretá: todo lo que suelta, más el Iguazú, pasa por Yacyretá días después.
+
+**Con lluvia, desde 2024** (error medio, m, mismos días):
+
+| Plazo | Sólo estaciones | + lluvia | + Yacyretá | + las dos |
+|---|---|---|---|---|
+| 7 | 0,201 | 0,185 | 0,191 | 0,177 |
+| 10 | 0,213 | 0,189 | 0,207 | 0,185 |
+| 14 | 0,267 | 0,250 | 0,242 | 0,223 |
+| 17 | 0,320 | 0,305 | 0,291 | 0,275 |
+| 21 | 0,377 | 0,363 | 0,348 | 0,334 |
+
+Las dos ganancias se suman: la lluvia ve los afluentes del tramo y Yacyretá el cauce principal. A 7 y 10 días Yacyretá mejora desde 2024 pero no en 2022-2026, así que no entra en esos plazos. A 14 días mejora en los dos períodos.
+
+**Nivel o cambio.** Con el nivel y el cambio de Yacyretá, el error a 14 días da 0,223. Pero el coeficiente del nivel sale negativo, porque repite lo que ya dice Corrientes, y en un caso imposible (Yacyretá soltando cada vez más con Corrientes quieta) el modelo bajaba el río. Con sólo el cambio da 0,233 (17 días: 0,280 contra 0,276) y todos los coeficientes quedan positivos. Se eligió el cambio: se pierde 1 cm a cambio de que el modelo no haga cosas raras si un dato de Corrientes llega atrasado.
+
+**21 días.** El error baja a 0,334 m con las dos, pero la banda p10-p90 queda en ~1 m. No se publica.
+
 ## 5. Limitaciones conocidas
 
-- **Horizonte de 14 días:** más allá, el agua no pasó por ninguna estación observada.
+- **Horizonte de 17 días:** las estaciones llegan a 14 y lo que suelta Yacyretá lo estira tres días más; a 21 días la banda ya es de un metro.
 - **Linealidad:** las crecidas y bajantes rápidas se corrigen con un sesgo por régimen, que es un parche. Un evento sin precedentes en 2005-2021 puede quedar fuera de la banda.
 - **Muestra corta para la lluvia:** la prueba con pronósticos reales cubre 2,6 años de días consecutivos, muy correlacionados entre sí.
-- **Represas:** lo que se suelta en Brasil se ve recién cuando pasa por Corrientes.
+- **Represas:** lo que se suelta en Brasil se ve recién cuando pasa por Yacyretá. Itaipú no agregó nada medible.
 - **Puntos fijos para la lluvia:** no son cuencas delimitadas ni ponderadas por área.
 - **Altura, no caudal:** el modelo trabaja sobre alturas de escala, no sobre caudales.
 
@@ -188,10 +246,11 @@ Donde más nos serviría una opinión especializada:
 3. **Lluvia por cuenca.** ¿Qué delimitación y qué ponderación usarían para los afluentes del tramo (Salado, Feliciano, Guayquiraró, Corriente)? ¿Cómo entraría la humedad del suelo como lluvia efectiva? Tal como la probamos, no ayudó.
 4. **Validación.** ¿Qué métricas o qué eventos de referencia usarían para comparar con otros modelos (por ejemplo, NSE o eventos de crecida concretos)?
 5. **El pronóstico del INA como predictor.** ¿Tiene sentido usar el pronóstico oficial a 3-4 días como entrada de los plazos más largos?
-6. **Datos que no estamos usando.** ¿Hay series abiertas de caudal, de afluentes o de embalses que deberíamos sumar?
+6. **Caudales de las represas.** ¿Hay una forma mejor de usar lo que suelta Yacyretá, por ejemplo con tiempos de viaje que dependan del caudal, en vez de su cambio en 3 días?
+7. **Datos que no estamos usando.** ¿Hay series abiertas de caudal, de afluentes o de embalses que deberíamos sumar?
 
 Las respuestas, en los [issues](../../issues) del repositorio o por mail.
 
 ## 7. Atribuciones
 
-Alturas: Instituto Nacional del Agua, Sistema de Alerta Hidrológico de la Cuenca del Plata (CC BY 4.0), sobre lecturas de Prefectura Naval Argentina. Reanálisis: Hersbach et al. (2020), ERA5; Muñoz-Sabater et al. (2021), ERA5-Land, Copernicus Climate Change Service. Pronósticos: ECMWF IFS open data y NOAA GFS, vía Open-Meteo (CC BY 4.0).
+Alturas y caudal de Yacyretá: Instituto Nacional del Agua, Sistema de Alerta Hidrológico de la Cuenca del Plata (CC BY 4.0), sobre lecturas de Prefectura Naval Argentina. Caudal de Itaipú: Operador Nacional do Sistema Elétrico (ONS), dados abertos (CC BY 4.0). Reanálisis: Hersbach et al. (2020), ERA5; Muñoz-Sabater et al. (2021), ERA5-Land, Copernicus Climate Change Service. Pronósticos: ECMWF IFS open data y NOAA GFS, vía Open-Meteo (CC BY 4.0).
