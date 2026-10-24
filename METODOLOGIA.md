@@ -1,6 +1,6 @@
 # Metodología de Y
 
-Modelo estadístico de la altura del río Paraná en Rosario a 3, 5, 7, 10, 14 y 17 días. Versión del 17 de octubre de 2026, con Yacyretá.
+Modelo estadístico de la altura del río Paraná en Rosario a 3, 5, 7, 10, 14 y 17 días. Versión del 24 de octubre de 2026, con Yacyretá y el tope en crecidas rápidas.
 
 Este documento describe qué hace el modelo, cómo se ajustó y cómo se midió, incluidas las pruebas que no mejoraron nada. Al final hay preguntas abiertas donde una mirada especializada sería lo más útil.
 
@@ -62,6 +62,8 @@ Los coeficientes están en `src/lib/pronostico-rio.ts` (`MODELOS`, `MODELOS_LLUV
 Si en vivo falta un dato se usa el modelo más simple que se pueda calcular: sin Yacyretá, el de lluvia; sin lluvia, el de sólo estaciones (y 17 días no sale).
 
 **Corrección por régimen.** Se clasifica cada día según cuánto cambió Corrientes en los 10 días previos: *sube* (más de +40 cm), *baja* (menos de −15 cm) o *resto*. La regresión lineal se queda corta con crecidas rápidas y se pasa con bajantes. Por eso al número se le resta la mediana del error medida en cada régimen.
+
+**Tope en crecidas rápidas.** Si Corrientes subió más de 1,5 m en 10 días, a 14 y 17 días el número no queda más de 35 cm por encima del de 10 días, y la banda se corre con él (`TOPE_CRECIDA`). A 14 y 17 días el modelo lee la altura de Corrientes de hoy como si fuera a llegar entera, pero en una crecida rápida la onda se achata en los bañados antes de Rosario. El de 10 días mira Reconquista, que ya la trae achatada. En 2005-2026, los días en que el modelo marcaba un salto de más de 50 cm entre 10 y 14 días, el salto real fue de 13 a 17 cm y el de 14 días se pasaba por 50 a 70 cm. Ver §4.5.
 
 **Banda.** Los percentiles 10 y 90 del error (pronosticado − real), por plazo y régimen, alrededor de la regresión sin corregir. Lo real cae adentro 8 de cada 10 veces en el período de prueba.
 
@@ -226,12 +228,27 @@ Las dos ganancias se suman: la lluvia ve los afluentes del tramo y Yacyretá el 
 
 **Nivel o cambio.** Con el nivel y el cambio de Yacyretá, el error a 14 días da 0,223. Pero el coeficiente del nivel sale negativo, porque repite lo que ya dice Corrientes, y en un caso imposible (Yacyretá soltando cada vez más con Corrientes quieta) el modelo bajaba el río. Con sólo el cambio da 0,233 (17 días: 0,280 contra 0,276) y todos los coeficientes quedan positivos. Se eligió el cambio: se pierde 1 cm a cambio de que el modelo no haga cosas raras si un dato de Corrientes llega atrasado.
 
+### 4.5 Tope en crecidas rápidas
+
+Con `npm run tope-crecida`, después de `npm run ajuste-lluvia`. Error absoluto medio (m) sin y con el tope, con el mismo `pronosticar` que se publica; «crecida rápida»: Corrientes subió más de 1,5 m en 10 días.
+
+| Período | Días | Todos | Crecida rápida (n) | Cubre la banda en crecida rápida |
+|---|---|---|---|---|
+| 2022-2026, ERA5 (prueba) | 14 | 0,223 → 0,222 | 0,220 → 0,188 (56) | 79 → 82 % |
+| 2022-2026, ERA5 (prueba) | 17 | 0,275 → 0,274 | 0,245 → 0,198 (56) | 84 → 89 % |
+| desde 2024-02, ECMWF | 14 | 0,216 → 0,216 | 0,108 → 0,111 (17) | 94 → 94 % |
+| desde 2024-02, ECMWF | 17 | 0,270 → 0,270 | 0,165 → 0,156 (17) | 94 → 94 % |
+| 2005-2021, ERA5 (ajuste) | 14 | 0,196 → 0,196 | 0,300 → 0,271 (79) | 53 → 56 % |
+| 2005-2021, ERA5 (ajuste) | 17 | 0,226 → 0,225 | 0,284 → 0,236 (76) | 75 → 95 % |
+
+Qué más se probó: un término de interacción con la subida de Corrientes (lineal, cuadrático o desde 0,5, 1 y 1,5 m) mejoraba mucho dentro del ajuste y empeoraba en 2022-2026. Un tope más bajo (15-25 cm), o aplicado desde subidas más chicas (40 cm o 1 m), también empeoraba fuera de muestra: en octubre de 2025 el que se quedó corto fue el de 10 días, y el de 14 estaba más cerca. Con 1,5 m y 35 cm el total no empeora en ningún período; lo único que empeora son 3 mm en las crecidas rápidas a 14 días con ECMWF, sobre 17 días. La muestra de prueba es chica: 56 días de diez crecidas, muy correlacionados entre sí.
+
 **21 días.** El error baja a 0,334 m con las dos, pero la banda p10-p90 queda en ~1 m. No se publica.
 
 ## 5. Limitaciones conocidas
 
 - **Horizonte de 17 días:** las estaciones llegan a 14 y lo que suelta Yacyretá lo estira tres días más; a 21 días la banda ya es de un metro.
-- **Linealidad:** las crecidas y bajantes rápidas se corrigen con un sesgo por régimen, que es un parche. Un evento sin precedentes en 2005-2021 puede quedar fuera de la banda.
+- **Linealidad:** las crecidas y bajantes rápidas se corrigen con un sesgo por régimen y, a 14 y 17 días, con un tope; los dos son parches. Un evento sin precedentes en 2005-2021 puede quedar fuera de la banda.
 - **Muestra corta para la lluvia:** la prueba con pronósticos reales cubre 2,6 años de días consecutivos, muy correlacionados entre sí.
 - **Represas:** lo que se suelta en Brasil se ve recién cuando pasa por Yacyretá. Itaipú no agregó nada medible.
 - **Puntos fijos para la lluvia:** no son cuencas delimitadas ni ponderadas por área.

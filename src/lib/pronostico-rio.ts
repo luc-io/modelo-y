@@ -254,12 +254,17 @@ const BAJA = -0.15;
  * un día de hueco en cada punta; si no hay con qué comparar, null.
  */
 export function regimenCorrientes(s: Observacion[], hoy: string): Regimen | null {
+  const c = cambioCorrientes(s, hoy);
+  if (c === null) return null;
+  return c > SUBE ? 'sube' : c < BAJA ? 'baja' : 'resto';
+}
+
+/** Cuánto cambió Corrientes entre `hoy` y diez días antes, en metros, con un día de hueco en cada punta. */
+export function cambioCorrientes(s: Observacion[], hoy: string): number | null {
   const cerca = (dia: string) => enDia(s, dia) ?? enDia(s, menosDias(dia, 1));
   const ahora = cerca(hoy);
   const antes = cerca(menosDias(hoy, 10));
-  if (ahora === null || antes === null) return null;
-  const c = ahora - antes;
-  return c > SUBE ? 'sube' : c < BAJA ? 'baja' : 'resto';
+  return ahora === null || antes === null ? null : ahora - antes;
 }
 
 const enDia = (s: Observacion[], dia: string) => s.find((o) => o.dia === dia)?.metros ?? null;
@@ -366,17 +371,47 @@ export function predecir(
  */
 export function pronosticar(series: Record<string, Observacion[]>, hoy: string, lluvia?: LluviaTramo | null): Punto[] {
   const horizontes = [...new Set([...MODELOS, ...MODELOS_REPRESA].map((m) => m.horizonte))].sort((a, b) => a - b);
-  return horizontes
-    .map((h) => {
-      // Del más completo al más simple: si a uno le falta un dato, el siguiente.
-      const candidatos = lluvia
-        ? [MODELOS_REPRESA, MODELOS_LLUVIA, MODELOS].map((ms) => ms.find((x) => x.horizonte === h))
-        : [MODELOS.find((x) => x.horizonte === h)];
-      for (const m of candidatos) {
-        const p = m && predecir(series, hoy, m, lluvia);
-        if (p) return p;
-      }
-      return null;
-    })
-    .filter((p): p is Punto => p !== null);
+  const puntos = horizontes.map((h) => {
+    // Del más completo al más simple: si a uno le falta un dato, el siguiente.
+    const candidatos = lluvia
+      ? [MODELOS_REPRESA, MODELOS_LLUVIA, MODELOS].map((ms) => ms.find((x) => x.horizonte === h))
+      : [MODELOS.find((x) => x.horizonte === h)];
+    for (const m of candidatos) {
+      const p = m && predecir(series, hoy, m, lluvia);
+      if (p) return p;
+    }
+    return null;
+  });
+  topeCrecida(series, hoy, horizontes, puntos);
+  return puntos.filter((p): p is Punto => p !== null);
+}
+
+/**
+ * Con Corrientes subiendo rápido, a 14 y 17 días el modelo lee su altura de
+ * hoy como si fuera a llegar entera, y en las crecidas la onda se achata en
+ * los bañados de abajo: en 2005-2026, los días con un salto pronosticado de
+ * más de 50 cm entre 10 y 14 días, el salto real fue de 13-17 cm y el de 14
+ * días se pasó por 50-70 cm. El de 10 días mira Reconquista, que ya trae la
+ * onda achatada. Así que en esos días 14 y 17 no quedan más de
+ * `TOPE_CRECIDA.metros` por encima del de 10, y la banda se corre con el
+ * número. En 2022-2026, que el ajuste no vio, el error de esos días baja de
+ * 0,220 a 0,188 m a 14 días y de 0,245 a 0,198 a 17, y el de todos los días
+ * queda igual (`scripts/prueba-tope-crecida.ts`). Con un tope más bajo o
+ * desde subidas más chicas empeoraba, porque a veces el de 10 días es el que
+ * se queda corto (octubre de 2025).
+ */
+export const TOPE_CRECIDA = { subida: 1.5, metros: 0.35 };
+
+function topeCrecida(series: Record<string, Observacion[]>, hoy: string, horizontes: number[], puntos: (Punto | null)[]) {
+  const c = cambioCorrientes(series.corrientes ?? [], hoy);
+  const p10 = puntos[horizontes.indexOf(10)];
+  if (c === null || c <= TOPE_CRECIDA.subida || !p10) return;
+  const techo = p10.metros + TOPE_CRECIDA.metros;
+  horizontes.forEach((h, i) => {
+    const p = puntos[i];
+    if (h < 14 || !p || p.metros <= techo) return;
+    const r = (v: number) => Number(v.toFixed(2));
+    const baja = p.metros - techo;
+    puntos[i] = { ...p, metros: r(techo), min: r(p.min - baja), max: r(p.max - baja) };
+  });
 }
