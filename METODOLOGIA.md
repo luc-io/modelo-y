@@ -1,6 +1,6 @@
 # Metodología de Y
 
-Modelo estadístico de la altura del río Paraná en Rosario a 3, 5, 7, 10, 14 y 17 días. Versión del 24 de octubre de 2026, con Yacyretá y el tope en crecidas rápidas.
+Modelo estadístico de la altura del río Paraná en Rosario a 3, 5, 7, 10, 14 y 17 días. Versión del 26 de octubre de 2026, con Yacyretá y el tope en crecidas rápidas, que sigue 7 días después de la subida.
 
 Este documento describe qué hace el modelo, cómo se ajustó y cómo se midió, incluidas las pruebas que no mejoraron nada. Al final hay preguntas abiertas donde una mirada especializada sería lo más útil.
 
@@ -63,7 +63,7 @@ Si en vivo falta un dato se usa el modelo más simple que se pueda calcular: sin
 
 **Corrección por régimen.** Se clasifica cada día según cuánto cambió Corrientes en los 10 días previos: *sube* (más de +40 cm), *baja* (menos de −15 cm) o *resto*. La regresión lineal se queda corta con crecidas rápidas y se pasa con bajantes. Por eso al número se le resta la mediana del error medida en cada régimen.
 
-**Tope en crecidas rápidas.** Si Corrientes subió más de 1,5 m en 10 días, a 14 y 17 días el número no queda más de 35 cm por encima del de 10 días, y la banda se corre con él (`TOPE_CRECIDA`). A 14 y 17 días el modelo lee la altura de Corrientes de hoy como si fuera a llegar entera, pero en una crecida rápida la onda se achata en los bañados antes de Rosario. El de 10 días mira Reconquista, que ya la trae achatada. En 2005-2026, los días en que el modelo marcaba un salto de más de 50 cm entre 10 y 14 días, el salto real fue de 13 a 17 cm y el de 14 días se pasaba por 50 a 70 cm. Ver §4.5.
+**Tope en crecidas rápidas.** Si Corrientes subió más de 1,5 m en 10 días, a 14 y 17 días el número no queda más de 35 cm por encima del de 10 días, y la banda se corre con él (`TOPE_CRECIDA`). A 14 y 17 días el modelo lee la altura de Corrientes de hoy como si fuera a llegar entera, pero en una crecida rápida la onda se achata en los bañados antes de Rosario. El de 10 días mira Reconquista, que ya la trae achatada. En 2005-2026, los días en que el modelo marcaba un salto de más de 50 cm entre 10 y 14 días, el salto real fue de 13 a 17 cm y el de 14 días se pasaba por 50 a 70 cm. El tope sigue 7 días después de la última vez que Corrientes subió más de 1,5 m en 10 días (`TOPE_CRECIDA.memoria`): sin eso se apagaba de golpe cuando el comienzo de la subida salía de la ventana de 10 días, con la onda todavía en camino. Ver §4.5.
 
 **Banda.** Los percentiles 10 y 90 del error (pronosticado − real), por plazo y régimen, alrededor de la regresión sin corregir. Lo real cae adentro 8 de cada 10 veces en el período de prueba.
 
@@ -242,6 +242,19 @@ Con `npm run tope-crecida`, después de `npm run ajuste-lluvia`. Error absoluto 
 | 2005-2021, ERA5 (ajuste) | 17 | 0,226 → 0,225 | 0,284 → 0,236 (76) | 75 → 95 % |
 
 Qué más se probó: un término de interacción con la subida de Corrientes (lineal, cuadrático o desde 0,5, 1 y 1,5 m) mejoraba mucho dentro del ajuste y empeoraba en 2022-2026. Un tope más bajo (15-25 cm), o aplicado desde subidas más chicas (40 cm o 1 m), también empeoraba fuera de muestra: en octubre de 2025 el que se quedó corto fue el de 10 días, y el de 14 estaba más cerca. Con 1,5 m y 35 cm el total no empeora en ningún período; lo único que empeora son 3 mm en las crecidas rápidas a 14 días con ECMWF, sobre 17 días. La muestra de prueba es chica: 56 días de diez crecidas, muy correlacionados entre sí.
+
+**Memoria de 7 días** (26/10/2026). Ese día Corrientes había subido 2,4 m en dos semanas y se había aplanado: el cambio en 10 días bajó de 1,61 a 1,22 m, el tope se apagó y el escenario a 14 días quedó en 4,87 m, 75 cm arriba del de 10 días (4,12). Con el tope prendido da 4,47. Ahora el tope sigue prendido 7 días después de la última vez que se cumplió la condición. Error absoluto medio (m) sin tope, con el tope sin memoria y con la memoria; «cambia la memoria»: los días en que la memoria da otro número.
+
+| Período | Días | Con tope (n) | Cambia la memoria (n) | Cubre la banda donde cambia |
+|---|---|---|---|---|
+| 2022-2026, ERA5 (prueba) | 14 | 0,213 · 0,200 · 0,190 (139) | 0,317 → 0,140 (8) | 38 → 100 % |
+| 2022-2026, ERA5 (prueba) | 17 | 0,236 · 0,217 · 0,206 (139) | 0,291 → 0,173 (13) | 77 → 100 % |
+| desde 2024-02, ECMWF | 14 | 0,133 · 0,134 · 0,134 (47) | ningún día | — |
+| desde 2024-02, ECMWF | 17 | 0,190 · 0,187 · 0,187 (47) | ningún día | — |
+| 2005-2021, ERA5 (ajuste) | 14 | 0,259 · 0,248 · 0,245 (205) | 0,384 → 0,330 (11) | 18 → 27 % |
+| 2005-2021, ERA5 (ajuste) | 17 | 0,268 · 0,250 · 0,245 (200) | 0,252 → 0,188 (14) | 79 → 100 % |
+
+El total de todos los días no cambia (0,222 → 0,221 a 14 días en 2022-2026). Qué más se probó: mirar la subida en 14 días en vez de 10 (desde 1,5 o 2 m), 4 días de memoria, topear siempre que Corrientes viene subiendo, o topear siempre según el salto entre 10 y 14 días, con 35 o 50 cm. Con 4 días también mejora en todos los períodos, pero corrige menos días. Las otras empeoraban en algún período, casi siempre desde 2024 con ECMWF, que es como corre en vivo. La muestra es chica: entre 8 y 14 días por casilla.
 
 **21 días.** El error baja a 0,334 m con las dos, pero la banda p10-p90 queda en ~1 m. No se publica.
 

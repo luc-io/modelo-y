@@ -399,13 +399,35 @@ export function pronosticar(series: Record<string, Observacion[]>, hoy: string, 
  * queda igual (`scripts/prueba-tope-crecida.ts`). Con un tope más bajo o
  * desde subidas más chicas empeoraba, porque a veces el de 10 días es el que
  * se queda corto (octubre de 2025).
+ *
+ * El tope sigue prendido `TOPE_CRECIDA.memoria` días después de la última
+ * vez que Corrientes subió más que eso. Sin memoria se apagaba de golpe
+ * cuando el comienzo de la subida salía de la ventana de 10 días, con la onda
+ * todavía en camino, y el de 14 días quedaba 75 cm arriba del de 10
+ * (26/10/2026: 4,87 m contra 4,12; con el tope, 4,47). En los días en que
+ * la memoria cambia el número, el error baja de 0,32 a 0,14 m a 14 días y de
+ * 0,29 a 0,17 a 17 en 2022-2026, de 0,38 a 0,33 y de 0,25 a 0,19 en
+ * 2005-2021, y con ECMWF no cambia ningún día. Mirar
+ * la subida en 14 días, o topear siempre según el salto, empeoraba en algún
+ * período.
  */
-export const TOPE_CRECIDA = { subida: 1.5, metros: 0.35 };
+export const TOPE_CRECIDA = { subida: 1.5, metros: 0.35, memoria: 7 };
+
+/**
+ * Si a 14 y 17 días va el tope: Corrientes subió más de `TOPE_CRECIDA.subida`
+ * en 10 días hoy o en alguno de los `TOPE_CRECIDA.memoria` días anteriores.
+ */
+export function topeCrecidaActivo(corrientes: Observacion[], hoy: string): boolean {
+  for (let k = 0; k <= TOPE_CRECIDA.memoria; k++) {
+    const c = cambioCorrientes(corrientes, menosDias(hoy, k));
+    if (c !== null && c > TOPE_CRECIDA.subida) return true;
+  }
+  return false;
+}
 
 function topeCrecida(series: Record<string, Observacion[]>, hoy: string, horizontes: number[], puntos: (Punto | null)[]) {
-  const c = cambioCorrientes(series.corrientes ?? [], hoy);
   const p10 = puntos[horizontes.indexOf(10)];
-  if (c === null || c <= TOPE_CRECIDA.subida || !p10) return;
+  if (!p10 || !topeCrecidaActivo(series.corrientes ?? [], hoy)) return;
   const techo = p10.metros + TOPE_CRECIDA.metros;
   horizontes.forEach((h, i) => {
     const p = puntos[i];
