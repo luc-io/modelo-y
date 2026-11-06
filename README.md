@@ -16,7 +16,7 @@ Publicamos el código y la metodología para que especialistas en hidrología lo
 2. Para cada plazo (3, 5, 7, 10 y 14 días), una regresión lineal usa la altura de Rosario y el nivel y el cambio en 3 días de las estaciones que alcanzan, cada una con su retraso.
 3. Desde 7 días suma la lluvia sobre los afluentes del tramo argentino entre Corrientes y Rosario: la de la última semana y la pronosticada por ECMWF.
 4. Desde 14 días suma cuánto cambió en 3 días el caudal que suelta Yacyretá, que pasa por Corrientes días después. Con eso llega a 17 días.
-5. Corrige el número por el sesgo medido según cómo viene Corrientes (subiendo fuerte, bajando o estable). Si Corrientes subió más de 1,5 m en 10 días, a 14 y 17 días no lo deja más de 35 cm arriba del de 10, porque la onda se achata antes de llegar; el tope sigue 7 días después de esa subida, mientras la onda termina de bajar. Lo publica con la banda p10–p90 del error, medida en años que el ajuste no vio.
+5. Corrige el número por el sesgo medido según cómo viene Corrientes (subiendo fuerte, bajando o estable); la corrección por subida, sólo la primera semana. Si Corrientes subió más de 1 m en 10 días, a 14 y 17 días no lo deja más de 25 cm arriba del de 10, porque la onda se achata antes de llegar; el tope sigue 7 días después de esa subida, mientras la onda termina de bajar. Lo publica con la banda p10–p90 del error, medida en años que el ajuste no vio.
 
 El detalle, con todas las mediciones y lo que se probó y no sirvió, está en [METODOLOGIA.md](METODOLOGIA.md).
 
@@ -49,6 +49,7 @@ npm run prueba-terminos    # qué hacer con la lluvia observada en vivo
 npm run prueba-represas    # Yacyretá e Itaipú, 2022-2026, hasta 21 días
 npm run prueba-represas-lluvia  # Yacyretá junto con la lluvia, con ECMWF desde 2024
 npm run tope-crecida    # el tope de 14 y 17 días en crecidas rápidas (después de ajuste-lluvia)
+npm run sesgo-sube      # la corrección por subida, sólo la primera semana (después de ajuste-lluvia)
 ```
 
 Lo bajado queda en `.cache/`. El código del modelo está en `src/lib/`: `pronostico-rio.ts` (coeficientes, bandas, sesgos y la cuenta), `lluvia-tramo.ts` (puntos del tramo y lluvia típica) y `rio-historia.ts` (estaciones y series del INA).

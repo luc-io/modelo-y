@@ -13,7 +13,8 @@
     "prueba-terminos": "MODO=terminos tsx scripts/prueba-lluvia.ts",
     "prueba-represas": "tsx scripts/prueba-represas.ts",
     "prueba-represas-lluvia": "tsx scripts/prueba-represas-lluvia.ts",
-    "tope-crecida": "tsx scripts/prueba-tope-crecida.ts"
+    "tope-crecida": "tsx scripts/prueba-tope-crecida.ts",
+    "sesgo-sube": "tsx scripts/prueba-sesgo-sube.ts"
   },
   "devDependencies": {
     "@types/node": "^20.0.0",
