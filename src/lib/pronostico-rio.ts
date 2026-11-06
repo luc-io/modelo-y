@@ -342,6 +342,32 @@ export function predictores(
 }
 
 /**
+ * La corrección por crecida («sube») vale sólo la primera semana de la
+ * subida de Corrientes: ahí la regresión se queda corta porque la onda
+ * todavía no llegó a las estaciones de abajo. Después de `SUBE_SEMANA` días
+ * seguidos subiendo, la regresión sola ya erra poco (mediana −2 cm a 7 días
+ * en 2005-2021, −4 en 2022-2026) y la corrección la pasaba de largo: en la
+ * crecida de octubre de 2026 el escenario a una semana se pasó por 20 cm,
+ * cuando sin corregir erraba 5. Sin corregir esos días, el error a 7 días
+ * baja de 0,178 a 0,177 m en 2022-2026 y de 0,133 a 0,130 en 2005-2021, y
+ * en las subidas de más de una semana de 0,175 a 0,158 y de 0,167 a 0,120;
+ * a 3 y 14 días queda igual. Con ECMWF desde 2024 sube 1 mm a 7 días
+ * (`scripts/prueba-sesgo-sube.ts`). Las bandas no cambian: salen de la
+ * regresión cruda; se mueve sólo el número central.
+ */
+export const SUBE_SEMANA = 7;
+
+/** Días seguidos, contando hoy, que Corrientes viene en «sube» (hasta `SUBE_SEMANA` + 1). */
+export function diasSubiendo(corrientes: Observacion[], hoy: string): number {
+  let n = 0;
+  while (n <= SUBE_SEMANA && regimenCorrientes(corrientes, menosDias(hoy, n)) === 'sube') n++;
+  return n;
+}
+
+const corregir = (corrientes: Observacion[], hoy: string, r: Regimen) =>
+  r !== 'sube' || diasSubiendo(corrientes, hoy) <= SUBE_SEMANA;
+
+/**
  * Aplica un modelo: la regresión corrida por la mediana de su error en el
  * régimen de Corrientes, con la banda medida alrededor. La banda queda donde
  * estaba —sale de los mismos errores—; lo que se mueve es el número central
@@ -358,7 +384,7 @@ export function predecir(
   if (crudo === null) return null;
   const regimen = regimenCorrientes(series.corrientes ?? [], hoy);
   const b = banda(m, regimen);
-  const metros = crudo - (regimen ? tablas(m).sesgos[m.horizonte][regimen] : 0);
+  const metros = crudo - (regimen && corregir(series.corrientes ?? [], hoy, regimen) ? tablas(m).sesgos[m.horizonte][regimen] : 0);
   const r = (v: number) => Number(v.toFixed(2));
   return { dia: menosDias(hoy, 1 - m.horizonte), metros: r(metros), min: r(crudo + b[0]), max: r(crudo + b[1]) };
 }
@@ -396,9 +422,21 @@ export function pronosticar(series: Record<string, Observacion[]>, hoy: string, 
  * `TOPE_CRECIDA.metros` por encima del de 10, y la banda se corre con el
  * número. En 2022-2026, que el ajuste no vio, el error de esos días baja de
  * 0,220 a 0,188 m a 14 días y de 0,245 a 0,198 a 17, y el de todos los días
- * queda igual (`scripts/prueba-tope-crecida.ts`). Con un tope más bajo o
- * desde subidas más chicas empeoraba, porque a veces el de 10 días es el que
- * se queda corto (octubre de 2025).
+ * queda igual (`scripts/prueba-tope-crecida.ts`).
+ *
+ * Desde el 6/11/2026 el tope va desde subidas de 1 m (antes 1,5) y deja 25 cm
+ * (antes 35). Antes, un tope más bajo empeoraba porque a veces el de 10 días
+ * se quedaba corto (octubre de 2025); desde que la corrección por crecida
+ * vale sólo la primera semana (`SUBE_SEMANA`), el de 10 días ya no se queda
+ * corto en las subidas largas. En la crecida de octubre de 2026 el de 14
+ * días se pasaba por 60-75 cm antes de prenderse el tope (Corrientes +1,3 m)
+ * y por 33 con él, cuando entre los días 10 y 14 el río subió 7-12 cm. Con
+ * los valores nuevos el error de todos los días mejora o queda igual en cada
+ * período (2005-2021: 0,194 → 0,192 a 14 días, 0,224 → 0,222 a 17;
+ * 2022-2026: 0,221 → 0,220 y 0,271 igual; con ECMWF: 0,221 → 0,220 y 0,271 →
+ * 0,270), y en esa crecida baja de 0,245 a 0,171 a 14 días y de 0,212 a
+ * 0,125 a 17. Con 20 cm esa crecida mejoraba más, pero 17 días empeoraba
+ * 1-3 mm en 2022-2026.
  *
  * El tope sigue prendido `TOPE_CRECIDA.memoria` días después de la última
  * vez que Corrientes subió más que eso. Sin memoria se apagaba de golpe
@@ -411,7 +449,7 @@ export function pronosticar(series: Record<string, Observacion[]>, hoy: string, 
  * la subida en 14 días, o topear siempre según el salto, empeoraba en algún
  * período.
  */
-export const TOPE_CRECIDA = { subida: 1.5, metros: 0.35, memoria: 7 };
+export const TOPE_CRECIDA = { subida: 1.0, metros: 0.25, memoria: 7 };
 
 /**
  * Si a 14 y 17 días va el tope: Corrientes subió más de `TOPE_CRECIDA.subida`

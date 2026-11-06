@@ -61,9 +61,9 @@ Los coeficientes están en `src/lib/pronostico-rio.ts` (`MODELOS`, `MODELOS_LLUV
 
 Si en vivo falta un dato se usa el modelo más simple que se pueda calcular: sin Yacyretá, el de lluvia; sin lluvia, el de sólo estaciones (y 17 días no sale).
 
-**Corrección por régimen.** Se clasifica cada día según cuánto cambió Corrientes en los 10 días previos: *sube* (más de +40 cm), *baja* (menos de −15 cm) o *resto*. La regresión lineal se queda corta con crecidas rápidas y se pasa con bajantes. Por eso al número se le resta la mediana del error medida en cada régimen.
+**Corrección por régimen.** Se clasifica cada día según cuánto cambió Corrientes en los 10 días previos: *sube* (más de +40 cm), *baja* (menos de −15 cm) o *resto*. La regresión lineal se queda corta con crecidas rápidas y se pasa con bajantes. Por eso al número se le resta la mediana del error medida en cada régimen. La corrección «sube» vale sólo la primera semana de la subida: si Corrientes ya lleva más de 7 días seguidos en *sube* (`SUBE_SEMANA`), no se corrige, porque para entonces la onda ya llegó a las estaciones de abajo y la regresión sola erra poco. La banda no cambia: sale de la regresión sin corregir. Ver §4.6.
 
-**Tope en crecidas rápidas.** Si Corrientes subió más de 1,5 m en 10 días, a 14 y 17 días el número no queda más de 35 cm por encima del de 10 días, y la banda se corre con él (`TOPE_CRECIDA`). A 14 y 17 días el modelo lee la altura de Corrientes de hoy como si fuera a llegar entera, pero en una crecida rápida la onda se achata en los bañados antes de Rosario. El de 10 días mira Reconquista, que ya la trae achatada. En 2005-2026, los días en que el modelo marcaba un salto de más de 50 cm entre 10 y 14 días, el salto real fue de 13 a 17 cm y el de 14 días se pasaba por 50 a 70 cm. El tope sigue 7 días después de la última vez que Corrientes subió más de 1,5 m en 10 días (`TOPE_CRECIDA.memoria`): sin eso se apagaba de golpe cuando el comienzo de la subida salía de la ventana de 10 días, con la onda todavía en camino. Ver §4.5.
+**Tope en crecidas rápidas.** Si Corrientes subió más de 1 m en 10 días, a 14 y 17 días el número no queda más de 25 cm por encima del de 10 días, y la banda se corre con él (`TOPE_CRECIDA`). A 14 y 17 días el modelo lee la altura de Corrientes de hoy como si fuera a llegar entera, pero en una crecida rápida la onda se achata en los bañados antes de Rosario. El de 10 días mira Reconquista, que ya la trae achatada. En 2005-2026, los días en que el modelo marcaba un salto de más de 50 cm entre 10 y 14 días, el salto real fue de 13 a 17 cm y el de 14 días se pasaba por 50 a 70 cm. El tope sigue 7 días después de la última vez que Corrientes subió más de 1 m en 10 días (`TOPE_CRECIDA.memoria`): sin eso se apagaba de golpe cuando el comienzo de la subida salía de la ventana de 10 días, con la onda todavía en camino. Hasta el 6/11/2026 iba desde subidas de 1,5 m y dejaba 35 cm. Ver §4.5.
 
 **Banda.** Los percentiles 10 y 90 del error (pronosticado − real), por plazo y régimen, alrededor de la regresión sin corregir. Lo real cae adentro 8 de cada 10 veces en el período de prueba.
 
@@ -135,7 +135,7 @@ Banda p10/p90 del error con lluvia y Yacyretá (m):
 
 Como con la lluvia, estas bandas se midieron sobre los mismos días que la tabla anterior.
 
-## 4. Lo que se probó para llegar a la lluvia
+## 4. Lo que se probó
 
 Todas las pruebas con el mismo protocolo: ajuste 2005-2021 y medición fuera de muestra. El código está en `scripts/prueba-lluvia.ts`.
 
@@ -230,7 +230,7 @@ Las dos ganancias se suman: la lluvia ve los afluentes del tramo y Yacyretá el 
 
 ### 4.5 Tope en crecidas rápidas
 
-Con `npm run tope-crecida`, después de `npm run ajuste-lluvia`. Error absoluto medio (m) sin y con el tope, con el mismo `pronosticar` que se publica; «crecida rápida»: Corrientes subió más de 1,5 m en 10 días.
+Con `npm run tope-crecida`, después de `npm run ajuste-lluvia`. Error absoluto medio (m) sin y con el tope, con el mismo `pronosticar` que se publica. Esta primera tabla es la del tope original, desde subidas de 1,5 m y con 35 cm; «crecida rápida»: Corrientes subió más de 1,5 m en 10 días. Los valores de hoy (1 m y 25 cm) están al final de esta sección.
 
 | Período | Días | Todos | Crecida rápida (n) | Cubre la banda en crecida rápida |
 |---|---|---|---|---|
@@ -255,6 +255,30 @@ Qué más se probó: un término de interacción con la subida de Corrientes (li
 | 2005-2021, ERA5 (ajuste) | 17 | 0,268 · 0,250 · 0,245 (200) | 0,252 → 0,188 (14) | 79 → 100 % |
 
 El total de todos los días no cambia (0,222 → 0,221 a 14 días en 2022-2026). Qué más se probó: mirar la subida en 14 días en vez de 10 (desde 1,5 o 2 m), 4 días de memoria, topear siempre que Corrientes viene subiendo, o topear siempre según el salto entre 10 y 14 días, con 35 o 50 cm. Con 4 días también mejora en todos los períodos, pero corrige menos días. Las otras empeoraban en algún período, casi siempre desde 2024 con ECMWF, que es como corre en vivo. La muestra es chica: entre 8 y 14 días por casilla.
+
+**Desde subidas de 1 m y con 25 cm** (6/11/2026). Antes, un tope más bajo o desde subidas más chicas empeoraba porque a veces el de 10 días se quedaba corto (octubre de 2025). Desde que la corrección «sube» vale sólo la primera semana (§4.6), el de 10 días ya no se queda corto en las subidas largas. En la crecida de octubre de 2026 el de 14 días se pasaba por 60-75 cm antes de prenderse el tope (Corrientes subió 1,3 m en 10 días, menos que 1,5) y por 33 cm con él, cuando entre los días 10 y 14 el río subió 7-12 cm. Error absoluto medio de todos los días (m), con 1,5 m y 35 cm → con 1 m y 25 cm, ya con la corrección «sube» de la primera semana:
+
+| Período | 14 días | 17 días |
+|---|---|---|
+| 2005-2021, ERA5 (ajuste) | 0,194 → 0,192 | 0,224 → 0,222 |
+| 2022-2026, ERA5 (prueba) | 0,221 → 0,220 | 0,271 → 0,271 |
+| desde 2024-02, ECMWF | 0,221 → 0,220 | 0,271 → 0,270 |
+| crecida de octubre de 2026 | 0,245 → 0,171 | 0,212 → 0,125 |
+
+Mejora o empata en todos los períodos. Con 20 cm esa crecida mejoraba más, pero a 17 días empeoraba 1-3 mm en 2022-2026.
+
+### 4.6 Corrección «sube» sólo la primera semana
+
+Con `npm run sesgo-sube`, después de `npm run ajuste-lluvia`. En la crecida de octubre de 2026 (Corrientes +2,4 m en 10 días) el escenario a 7 días se pasó por ~20 cm: la regresión sola erraba 5 y la corrección «sube» le sumaba 16. Mirando el error de la regresión sin corregir en los días «sube», la que se queda corta es la primera semana de la subida, cuando la onda todavía no llegó a las estaciones de abajo. Después de 7 días seguidos subiendo, la mediana del error a 7 días es de −2 cm en 2005-2021 y −4 en 2022-2026, y la corrección la pasaba de largo.
+
+Error absoluto medio a 7 días (m), corrigiendo siempre → sin corregir «sube» después de 7 días:
+
+| Período | Todos los días | Subidas de más de una semana |
+|---|---|---|
+| 2005-2021 (ajuste) | 0,133 → 0,130 | 0,167 → 0,120 |
+| 2022-2026 (prueba) | 0,178 → 0,177 | 0,175 → 0,158 |
+
+A 3 y 14 días queda igual. Con lluvia de ECMWF, desde 2024, sube 1 mm a 7 días. Medido el 6/11/2026, con datos hasta esa crecida. Qué más se probó: no corregir «sube» cuando Corrientes subió más de 2 m, que mejora menos dentro del ajuste. Y correcciones ajustadas en 2005-2021: por régimen y semana de la subida, por si Reconquista o Rosario ya venían subiendo, o lineal con las subidas de Corrientes, Reconquista y Rosario. Mejoran dentro del ajuste, pero en 2022-2026 el total empeora entre 2 y 7 mm.
 
 **21 días.** El error baja a 0,334 m con las dos, pero la banda p10-p90 queda en ~1 m. No se publica.
 
