@@ -22,6 +22,14 @@ const leer = (n: string) => JSON.parse(readFileSync(join(CACHE, `${n}-${fecha}.j
 
 export const series: Record<string, Observacion[]> = {};
 for (const k of ['rosario', 'corrientes', 'goya', 'reconquista', 'la-paz', 'parana', 'yacyreta']) series[k] = leer(`rio-${k}`);
+// Las del medio del tramo (`ESTACIONES_MEDIO`), si ya se bajaron (`npm run estaciones-medias`).
+for (const k of ['bella-vista', 'esquina', 'santa-elena']) {
+  try {
+    series[k] = leer(`rio-${k}`);
+  } catch {
+    // Sin ellas, los modelos del medio no se pueden ajustar ni medir.
+  }
+}
 export const rosario = new Map(series.rosario.map((o) => [o.dia, o.metros]));
 
 /** Promedio de los puntos del tramo, día por día; sólo los días que tienen todos. */
