@@ -14,7 +14,10 @@
     "prueba-represas": "tsx scripts/prueba-represas.ts",
     "prueba-represas-lluvia": "tsx scripts/prueba-represas-lluvia.ts",
     "tope-crecida": "tsx scripts/prueba-tope-crecida.ts",
-    "sesgo-sube": "tsx scripts/prueba-sesgo-sube.ts"
+    "sesgo-sube": "tsx scripts/prueba-sesgo-sube.ts",
+    "estaciones-medias": "tsx scripts/prueba-estaciones-medias.ts",
+    "ajuste-modelo-y": "tsx scripts/ajuste-modelo-y.ts",
+    "prueba-pico": "tsx scripts/prueba-pico.ts"
   },
   "devDependencies": {
     "@types/node": "^20.0.0",

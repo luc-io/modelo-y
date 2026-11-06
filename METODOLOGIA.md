@@ -1,6 +1,6 @@
 # Metodología de Y
 
-Modelo estadístico de la altura del río Paraná en Rosario a 3, 5, 7, 10, 14 y 17 días. Versión del 26 de octubre de 2026, con Yacyretá y el tope en crecidas rápidas, que sigue 7 días después de la subida.
+Modelo estadístico de la altura del río Paraná en Rosario a 3, 5, 7, 10, 14 y 17 días. Versión del 6 de noviembre de 2026: las cinco estaciones en todos los plazos, Bella Vista, Esquina y Santa Elena de 3 a 10 días, y desde 7 días la mezcla mitad alturas, mitad variaciones.
 
 Este documento describe qué hace el modelo, cómo se ajustó y cómo se midió, incluidas las pruebas que no mejoraron nada. Al final hay preguntas abiertas donde una mirada especializada sería lo más útil.
 
@@ -11,15 +11,18 @@ Este documento describe qué hace el modelo, cómo se ajustó y cómo se midió,
 | Estación | Serie INA | Retraso a Rosario |
 |---|---|---|
 | Corrientes | 19 | 14 días |
+| Bella Vista | 22 | 12 días (sus cambios, 6) |
 | Goya | 23 | 11 días |
 | Reconquista | 24 | 10 días |
+| Esquina | 25 | 8 días (sus cambios, 4) |
 | La Paz | 26 | 6 días |
+| Santa Elena | 27 | 5 días (sus cambios, 3) |
 | Paraná | 29 | 3 días |
 | Santa Fe | 30 | 2 días |
 | Diamante | 31 | 2 días |
 | Rosario | 34 | — |
 
-Los retrasos se eligieron maximizando la correlación entre cada estación desplazada y Rosario sobre diez años; las correlaciones dan entre 0,93 y 0,99.
+Los retrasos se eligieron maximizando la correlación entre cada estación desplazada y Rosario sobre diez años; las correlaciones dan entre 0,93 y 0,99. Los de Bella Vista, Esquina y Santa Elena se midieron el 6/11/2026 igual, con 2005-2021, y se llevaron a la misma escala: con ese método Corrientes da 16 y Paraná 4, uno o dos más que los de siempre. Para esas tres, el modelo no usa el retraso del agua sino el de sus cambios (`RETARDOS_CAMBIO`): cuántos días tarda en notarse en Rosario un cambio de la estación, el que maximiza la correlación entre su cambio en 3 días y el de Rosario después. Hernandarias no entra: tiene huecos de días seguidos.
 
 **Represas.** Caudal efluente diario de Yacyretá, serie 937 del INA (desde 1994, 99 % de los días desde 2005), en m³/s. Para las pruebas, también la vazão defluente diaria de Itaipú del ONS (`dados_hidrologicos_di`, reservatorio `PNITAI`, CC BY 4.0, desde 2000). Los dos se publican al día siguiente.
 
@@ -42,24 +45,34 @@ H_Rosario(t + h) = a + b · H_Rosario(t)
 ```
 
 - *t* es el último día con altura de Rosario.
-- *k* recorre las estaciones con retraso *r_k* ≥ *h*: las que todavía «alcanzan» a informar ese plazo. A 3 días son cinco (Corrientes a Paraná); a 14, sólo Corrientes. A 17 días no alcanza ninguna y entra Corrientes de hoy (el desplazamiento se acota en 0).
+- *k* recorre las cinco estaciones, Corrientes, Goya, Reconquista, La Paz y Paraná (`ESTACIONES_Y`), en todos los plazos. Las que todavía no mandaron su agua (*r_k* ≥ *h*) entran del día en que la mandan; las que ya la mandaron, con su dato de hoy (el desplazamiento se acota en 0), que dice si la onda ya pasó por ahí. Hasta el 6/11/2026 cada plazo miraba sólo las primeras (a 14 días, sólo Corrientes), ver §4.7. De 3 a 10 días se suman Bella Vista, Esquina y Santa Elena, con el retraso de sus cambios (`MODELOS_MEDIO`, §4.8).
 - *Q_Yacy* es el caudal que suelta Yacyretá, en decenas de miles de m³/s. Entra sólo su cambio en 3 días, no su nivel (ver 4.4).
 - Para cada estación entran el nivel y su cambio en 3 días, en el día que corresponde a su retraso.
 - *P_pasada* es la lluvia del tramo en los 7 días hasta *t*.
 - *P_futura* es la lluvia pronosticada para los días *t+1* a *t+7*, más la típica de la época para *t+8* a *t+h*. Ambas van en decenas de mm.
 
-| Plazo | Estaciones |
-|---|---|
-| 3 días | Corrientes, Goya, Reconquista, La Paz, Paraná |
-| 5 días | Corrientes, Goya, Reconquista, La Paz |
-| 7 días | Corrientes, Goya, Reconquista (+ lluvia) |
-| 10 días | Corrientes, Goya, Reconquista (+ lluvia) |
-| 14 días | Corrientes (+ lluvia + Yacyretá) |
-| 17 días | Corrientes de hoy (+ lluvia + Yacyretá) |
+| Plazo | Estaciones | Además |
+|---|---|---|
+| 3 días | las cinco + las tres del medio | |
+| 5 días | las cinco + las tres del medio | |
+| 7 días | las cinco + las tres del medio | lluvia; mezcla con variaciones |
+| 10 días | las cinco + las tres del medio | lluvia; mezcla con variaciones |
+| 14 días | las cinco | lluvia + Yacyretá; mezcla con variaciones |
+| 17 días | las cinco | lluvia + Yacyretá; mezcla con variaciones |
 
-Los coeficientes están en `src/lib/pronostico-rio.ts` (`MODELOS`, `MODELOS_LLUVIA` y `MODELOS_REPRESA`). Los de lluvia salen positivos en todos los plazos. En los modelos con Yacyretá, todos los coeficientes salvo la ordenada son positivos.
+Los coeficientes están en `src/lib/pronostico-rio.ts` (`MODELOS`, `MODELOS_MEDIO`, `MODELOS_LLUVIA` y `MODELOS_REPRESA`).
 
-Si en vivo falta un dato se usa el modelo más simple que se pueda calcular: sin Yacyretá, el de lluvia; sin lluvia, el de sólo estaciones (y 17 días no sale).
+**Mezcla con variaciones, desde 7 días.** Cada modelo de 7 días o más tiene un gemelo «sólo variaciones» (`cambios`) que pronostica cuánto va a cambiar Rosario sin mirar ninguna altura:
+
+```
+H_Rosario(t + h) − H_Rosario(t) = a' + Σ_k [ c'_k · (H_k(s_k) − H_k(s_k − 3)) + d'_k · (H_k(s_k) − H_k(s_k − 10)) ]
+                                + b' · (H_Rosario(t) − H_Rosario(t − 7))
+                                + (Yacyretá y lluvia como arriba, si el modelo los usa)
+```
+
+con *s_k* el mismo día que mira la regresión con alturas. El número publicado es el promedio de los dos (`PESO_ALTURA` = 0,5). Las alturas dicen hacia dónde tiende Rosario (con Corrientes alta y Rosario bajo, falta agua por llegar); las variaciones, la forma de la onda. Solas, las alturas sobreajustan. Si al gemelo le falta historia (el cambio en 10 días), sale el de alturas solo. Ver §4.9.
+
+Si en vivo falta un dato se usa el modelo más completo que se pueda calcular: con lluvia, Yacyretá, después el de las estaciones del medio, después el de lluvia y por último el de sólo estaciones; sin lluvia, el de las estaciones del medio y después el de las cinco. Una falla del INA en Bella Vista, Esquina o Santa Elena no tira abajo el pronóstico. A 17 días, sin Yacyretá no sale.
 
 **Corrección por régimen.** Se clasifica cada día según cuánto cambió Corrientes en los 10 días previos: *sube* (más de +40 cm), *baja* (menos de −15 cm) o *resto*. La regresión lineal se queda corta con crecidas rápidas y se pasa con bajantes. Por eso al número se le resta la mediana del error medida en cada régimen. La corrección «sube» vale sólo la primera semana de la subida: si Corrientes ya lleva más de 7 días seguidos en *sube* (`SUBE_SEMANA`), no se corrige, porque para entonces la onda ya llegó a las estaciones de abajo y la regresión sola erra poco. La banda no cambia: sale de la regresión sin corregir. Ver §4.6.
 
@@ -75,39 +88,39 @@ Si en vivo falta un dato se usa el modelo más simple que se pueda calcular: sin
 - **Prueba del modelo sin lluvia:** 2022-2026, años que el ajuste no vio y que incluyen la bajante histórica de 2021-2023.
 - **Prueba del modelo con lluvia:** desde el 15 de febrero de 2024, usando lo que ECMWF de verdad pronosticaba cada día, no la lluvia que después cayó. Es el período que cubre el archivo de pronósticos.
 
-### Modelo sin lluvia (2022-2026)
+Todos los números de esta sección son del pronóstico como se publica: corregido por el sesgo, con la banda alrededor y, desde 7 días, con la mezcla. Medidos el 6/11/2026 con `npm run ajuste-modelo-y`, que reajusta todo y lo compara con las constantes del código sobre los mismos días.
 
-| Plazo | Error absoluto medio |
-|---|---|
-| 3 días | 0,104 m |
-| 5 días | 0,145 m |
-| 7 días | 0,198 m |
-| 10 días | 0,214 m |
-| 14 días | 0,280 m |
+### Modelo de las cinco estaciones, sin lluvia (2022-2026)
 
-Le gana a la persistencia (suponer que el río se queda donde está) por entre un 21 y un 32 % según el plazo.
+| Plazo | n | Error absoluto medio | Banda p10-p90 | Cubre |
+|---|---|---|---|---|
+| 3 días | 1730 | 0,096 m | 29 cm | 80 % |
+| 5 días | 1728 | 0,130 m | 42 cm | 80 % |
+| 7 días | 1726 | 0,147 m | 47 cm | 80 % |
+| 10 días | 1720 | 0,188 m | 62 cm | 80 % |
+| 14 días | 1712 | 0,245 m | 80 cm | 80 % |
+
+A 7 días, con las estaciones de antes, era 0,176 m y la banda de 57 cm (§4.7).
 
 Banda p10/p90 del error (m), por régimen:
 
 | Plazo | sube | baja | resto |
 |---|---|---|---|
-| 3 | −0,14 / 0,14 | −0,11 / 0,18 | −0,13 / 0,18 |
-| 5 | −0,29 / 0,13 | −0,14 / 0,28 | −0,24 / 0,23 |
-| 7 | −0,51 / 0,09 | −0,18 / 0,37 | −0,31 / 0,25 |
-| 10 | −0,49 / 0,14 | −0,22 / 0,41 | −0,39 / 0,26 |
-| 14 | −0,57 / 0,26 | −0,34 / 0,61 | −0,46 / 0,40 |
+| 3 | −0,13 / 0,14 | −0,12 / 0,18 | −0,13 / 0,18 |
+| 5 | −0,23 / 0,17 | −0,12 / 0,28 | −0,21 / 0,26 |
+| 7 | −0,33 / 0,12 | −0,12 / 0,34 | −0,26 / 0,24 |
+| 10 | −0,40 / 0,23 | −0,21 / 0,37 | −0,36 / 0,30 |
+| 14 | −0,41 / 0,34 | −0,34 / 0,46 | −0,46 / 0,38 |
 
-Medidas el 12 de octubre de 2026. `npm run margen` las recalcula con todos los días hasta hoy, así que puede moverlas ±1 cm.
+`npm run ajuste-modelo-y` las recalcula con todos los días hasta hoy, así que puede moverlas ±1 cm.
 
-### Modelo con lluvia (desde febrero de 2024, mismos días)
+### Modelo con lluvia (desde febrero de 2024, con ECMWF)
 
-Número corregido por el sesgo y banda alrededor, como se publica:
-
-| Plazo | n | Error sin lluvia | Error con lluvia | Cambio | Banda sin | Banda con | Cobertura sin | Cobertura con |
-|---|---|---|---|---|---|---|---|---|
-| 7 | 917 | 0,181 m | 0,168 m | −7 % | 57 cm | 53 cm | 79 % | 80 % |
-| 10 | 911 | 0,201 m | 0,178 m | −11 % | 64 cm | 58 cm | 80 % | 80 % |
-| 14 | 903 | 0,261 m | 0,240 m | −8 % | 89 cm | 76 cm | 82 % | 80 % |
+| Plazo | n | Error absoluto medio | Banda p10-p90 | Cubre |
+|---|---|---|---|---|
+| 7 | 937 | 0,144 m | 44 cm | 80 % |
+| 10 | 931 | 0,174 m | 55 cm | 80 % |
+| 14 | 923 | 0,225 m | 74 cm | 80 % |
 
 **Cuidado:** las bandas del modelo con lluvia se midieron sobre esos mismos días, por lo que su cobertura del 80 % es por construcción. Las del modelo sin lluvia vienen de 2022-2026.
 
@@ -115,25 +128,49 @@ Banda p10/p90 del error con lluvia (m):
 
 | Plazo | sube | baja | resto |
 |---|---|---|---|
-| 7 | −0,46 / 0,11 | −0,18 / 0,35 | −0,27 / 0,24 |
-| 10 | −0,45 / 0,14 | −0,22 / 0,37 | −0,32 / 0,24 |
-| 14 | −0,55 / 0,22 | −0,27 / 0,46 | −0,37 / 0,43 |
+| 7 | −0,30 / 0,10 | −0,09 / 0,36 | −0,22 / 0,24 |
+| 10 | −0,33 / 0,19 | −0,19 / 0,35 | −0,32 / 0,27 |
+| 14 | −0,40 / 0,34 | −0,32 / 0,43 | −0,38 / 0,36 |
 
 ### Modelo con lluvia y Yacyretá (desde febrero de 2024, mismos días)
 
-| Plazo | n | Error antes | Error con Yacyretá | Cambio | Banda antes | Banda con Yacyretá | Cobertura |
-|---|---|---|---|---|---|---|---|
-| 14 | 903 | 0,240 m (con lluvia) | 0,216 m | −10 % | 76 cm | 71 cm | 80 % |
-| 17 | 900 | 0,412 m (persistencia) | 0,270 m | −34 % | — | 87 cm | 80 % |
+| Plazo | n | Error absoluto medio | Banda p10-p90 | Cubre |
+|---|---|---|---|---|
+| 14 | 923 | 0,212 m | 71 cm | 80 % |
+| 17 | 920 | 0,263 m | 84 cm | 79 % |
+
+A 17 días, la persistencia erra 0,412 m.
 
 Banda p10/p90 del error con lluvia y Yacyretá (m):
 
 | Plazo | sube | baja | resto |
 |---|---|---|---|
-| 14 | −0,50 / 0,15 | −0,23 / 0,47 | −0,38 / 0,38 |
-| 17 | −0,62 / 0,31 | −0,31 / 0,49 | −0,45 / 0,46 |
+| 14 | −0,37 / 0,34 | −0,27 / 0,42 | −0,40 / 0,32 |
+| 17 | −0,43 / 0,44 | −0,38 / 0,44 | −0,47 / 0,38 |
 
 Como con la lluvia, estas bandas se midieron sobre los mismos días que la tabla anterior.
+
+### Con las estaciones del medio
+
+Contra el modelo de las cinco, sobre los mismos días (3 y 5 días sin lluvia, en 2022-2026; 7 y 10 con lluvia de ECMWF, desde febrero de 2024):
+
+| Plazo | n | Las cinco | + las del medio | Cambio | Banda | Cubre |
+|---|---|---|---|---|---|---|
+| 3 | 1642 | 0,091 m | 0,087 m | −5 % | 29 → 27 cm | 80 % |
+| 5 | 1640 | 0,125 m | 0,109 m | −13 % | 42 → 34 cm | 79 % |
+| 7 | 910 | 0,141 m | 0,127 m | −10 % | 44 → 41 cm | 80 % |
+| 10 | 904 | 0,173 m | 0,168 m | −3 % | 55 → 53 cm | 79 % |
+
+Hay menos días que en las otras tablas porque las tres estaciones tienen más huecos.
+
+Banda p10/p90 del error con las del medio (m):
+
+| Plazo | sube | baja | resto |
+|---|---|---|---|
+| 3 | −0,13 / 0,13 | −0,11 / 0,16 | −0,13 / 0,15 |
+| 5 | −0,21 / 0,12 | −0,12 / 0,21 | −0,18 / 0,18 |
+| 7 | −0,22 / 0,13 | −0,16 / 0,27 | −0,21 / 0,23 |
+| 10 | −0,27 / 0,19 | −0,21 / 0,32 | −0,32 / 0,25 |
 
 ## 4. Lo que se probó
 
@@ -282,10 +319,41 @@ A 3 y 14 días queda igual. Con lluvia de ECMWF, desde 2024, sube 1 mm a 7 días
 
 **21 días.** El error baja a 0,334 m con las dos, pero la banda p10-p90 queda en ~1 m. No se publica.
 
+### 4.7 Las cinco estaciones en todos los plazos
+
+Con `npm run ajuste-modelo-y`, después de `npm run ajuste-lluvia`. Hasta el 6/11/2026 cada plazo miraba sólo las estaciones cuya agua todavía no había llegado a Rosario: a 14 y 17 días, sólo Corrientes. En la crecida de octubre-noviembre de 2026 el pico ya había pasado Goya y Reconquista, Corrientes bajaba de 7,42 a 7,02 m, y el escenario a 14 y 17 días seguía subiendo hasta 4,75 m porque no veía cómo estaban hoy las de abajo.
+
+Ahora los seis plazos miran las cinco (`ESTACIONES_Y`); las que ya mandaron su agua, con su dato de hoy. Se reajustaron con 2005-2021 los modelos base, con lluvia y con Yacyretá, y se volvieron a medir bandas y sesgos (el sesgo «sube», sólo en la primera semana de la subida, que es donde se aplica). Como se publica, sobre los mismos días:
+
+- 7 días: 0,176 → 0,147 m en 2022-2026 (−16 %).
+- 10 y 14 días: entre 5 y 9 % menos.
+- 14 y 17 días con lluvia y Yacyretá: entre 5 y 7 % menos.
+- Las bandas se angostan (a 7 días, de 57 a 47 cm) y siguen cubriendo el 80 %.
+
+### 4.8 Bella Vista, Esquina y Santa Elena, de 3 a 10 días
+
+Con `npm run estaciones-medias` (baja las series que falten) y `npm run ajuste-modelo-y`. Son las estaciones del medio del tramo, que tienen hoy el agua que llega a Rosario en 5 a 12 días (`ESTACIONES_MEDIO`). Con el retraso del agua sólo mejoraban a 5 días. Con el de sus cambios (`RETARDOS_CAMBIO`: Bella Vista 6, Esquina 4, Santa Elena 3), más corto y casi su dato de hoy, el error baja 5 % a 3 días, 13 % a 5, 9 % a 7 y 3 % a 10 (con datos hasta el 6/11/2026, 10 % a 7 días; ver §3). A 14 y 17 días no suman y no entran. Se ajustan sin lluvia a 3 y 5 días y con lluvia a 7 y 10 (`MODELOS_MEDIO`, con sus propias `BANDAS_MEDIO` y `SESGOS_MEDIO`). Si alguna no informó, sale el modelo de las cinco. Hernandarias no entra porque tiene huecos de días seguidos.
+
+### 4.9 Mitad alturas, mitad variaciones, desde 7 días
+
+Con `npm run ajuste-modelo-y`. Con las alturas solas, una Corrientes alta empuja el pronóstico de Rosario para arriba aunque la onda ya esté bajando: en noviembre de 2026, con Corrientes en 7 m y Rosario en 4,06, el modelo con alturas seguía subiendo a 14 y 17 días y el de variaciones se aplanaba. El gemelo «sólo variaciones» (§2) mira cuánto cambió cada estación en 3 y 10 días y cuánto cambió Rosario en 7, y pronostica el cambio de Rosario.
+
+Para elegir el peso sin mirar el período de prueba, se ajustó con 2005-2015 y se midió en 2016-2021:
+
+- La mezcla mitad y mitad erra 3-4 % menos que las alturas solas a 7 y 10 días, 4-5 % a 14 y 7 % a 17 (con Yacyretá, 0,247 → 0,230 m).
+- 0,5 es el mejor peso en todos los modelos (`PESO_ALTURA`).
+- En 2022-2026 la mezcla y las alturas solas empatan, y con ECMWF desde 2024 la mezcla pierde 1-2 %.
+
+Se eligió la mezcla porque gana donde se eligió el peso sin sobreajustar y no pierde mucho donde pierde. Con la mezcla y las cinco estaciones, el 6/11/2026 el escenario quedaba en 4,16 m el 11/11, 4,35 el 14/11, 4,48 el 18/11 y 4,57 el 21/11, contra 4,30, 4,49, 4,66 y 4,75 del modelo anterior.
+
+**Tope de crecida, revalidado.** Con el modelo nuevo y con la mezcla, el tope desde subidas de 1 m y con 25 cm (§4.5) sigue mejorando o empatando en todos los períodos (`npm run tope-crecida`).
+
+**Qué más se probó** (`npm run prueba-pico`): predictores de «el pico ya pasó», sumados a la regresión de las cinco: cuánto bajó cada estación desde su máximo de los últimos 20 días, el cambio de Corrientes en 10 días, el de Rosario en 7, y la altura de Corrientes al cuadrado. A 14 y 17 días, ninguno mejora más de 2 % fuera de muestra, y no entran. En las crecidas parecidas a la de noviembre de 2026 (2013, 2014, 2023) Rosario siguió subiendo unos 60 cm en dos semanas, como dice el modelo. Tampoco sirvió no descontar la corrección «baja» cuando Rosario sube: empeora.
+
 ## 5. Limitaciones conocidas
 
 - **Horizonte de 17 días:** las estaciones llegan a 14 y lo que suelta Yacyretá lo estira tres días más; a 21 días la banda ya es de un metro.
-- **Linealidad:** las crecidas y bajantes rápidas se corrigen con un sesgo por régimen y, a 14 y 17 días, con un tope; los dos son parches. Un evento sin precedentes en 2005-2021 puede quedar fuera de la banda.
+- **Linealidad:** las crecidas y bajantes rápidas se corrigen con un sesgo por régimen, la mezcla con variaciones y, a 14 y 17 días, un tope; son parches. Un evento sin precedentes en 2005-2021 puede quedar fuera de la banda.
 - **Muestra corta para la lluvia:** la prueba con pronósticos reales cubre 2,6 años de días consecutivos, muy correlacionados entre sí.
 - **Represas:** lo que se suelta en Brasil se ve recién cuando pasa por Yacyretá. Itaipú no agregó nada medible.
 - **Puntos fijos para la lluvia:** no son cuencas delimitadas ni ponderadas por área.
