@@ -59,6 +59,43 @@ export interface ModeloRio {
    * de los dos (`PESO_ALTURA`).
    */
   cambios?: number[];
+  /**
+   * La variante que arranca Rosario desde el hidrómetro automático, a 3 y 5
+   * días: los mismos predictores más `cambioAutomatico`, con su error, bandas
+   * y sesgos (2022-2026, con el automático de verdad). Sale cuando hay
+   * automático; si no, el modelo de siempre. Ver `SERIE_AUTO`.
+   */
+  auto?: { coef: number[]; mae: number; bandas: Record<Regimen, [number, number]>; sesgos: Record<Regimen, number> };
+}
+
+/**
+ * Clave en `series` del hidrómetro automático de Rosario, a un valor por día
+ * (el de las 8, ver `automaticoDiario`) y en su propia escala.
+ *
+ * El cuadro de Prefectura con que corre el modelo es la lectura de la mañana
+ * anterior; el automático ya tiene la de hoy. Con cuánto cambió entre las dos
+ * como predictor, el error baja 15 % a 3 días (0,088 → 0,075 m con las del
+ * medio) y 7 % a 5 (0,114 → 0,106) en 2022-2026; a 7 días, 2 %, y desde 10
+ * nada, así que entra sólo a 3 y 5. Lo mismo con los automáticos de Paraná y
+ * La Paz no mejoró (0 a +2 %). `npm run ajuste-auto`.
+ */
+export const SERIE_AUTO = 'rosario-auto';
+
+/** Un cambio mayor en un día no es el río: es el sensor. Ahí sale el modelo de siempre. */
+const SALTO_AUTO = 0.6;
+
+/**
+ * Cuánto cambió el automático de Rosario entre las 8 del día anterior a `hoy`
+ * y las 8 de `hoy`, en metros: lo que subió o bajó el río desde la lectura
+ * de Prefectura fechada `hoy`, que es de la mañana anterior. Null si falta
+ * alguna de las dos o el salto no es creíble.
+ */
+export function cambioAutomatico(series: Record<string, Observacion[]>, hoy: string): number | null {
+  const s = series[SERIE_AUTO] ?? [];
+  const ahora = enDia(s, hoy);
+  const antes = enDia(s, menosDias(hoy, 1));
+  if (ahora === null || antes === null || Math.abs(ahora - antes) > SALTO_AUTO) return null;
+  return ahora - antes;
 }
 
 /**
@@ -137,12 +174,14 @@ export const MODELOS: ModeloRio[] = [
     usa: ESTACIONES_Y,
     coef: [0.046196, 0.75075, -0.028231, 0.010896, 0.062123, 0.003521, -0.119314, 0.025339, 0.032222, -0.04857, 0.28709, 0.486561],
     mae: 0.103,
+    auto: { coef: [0.032288, 0.825532, -0.019843, 0.004993, 0.047995, 0.0039, -0.083048, 0.024005, 0.018039, -0.043864, 0.200796, 0.35503, 0.859231], mae: 0.082, bandas: { sube: [-0.1, 0.11], baja: [-0.1, 0.14], resto: [-0.12, 0.14] }, sesgos: { sube: 0.01, baja: 0.04, resto: 0.03 } },
   },
   {
     horizonte: 5,
     usa: ESTACIONES_Y,
     coef: [0.030799, 0.660227, -0.015468, 0.040013, 0.026106, 0.036702, -0.102337, -0.075409, 0.088084, 0.169382, 0.320676, 0.483087],
     mae: 0.142,
+    auto: { coef: [0.016892, 0.722146, -0.012138, 0.035587, 0.016119, 0.04346, -0.06573, -0.093007, 0.072571, 0.182475, 0.249921, 0.369911, 0.699223], mae: 0.13, bandas: { sube: [-0.2, 0.13], baja: [-0.11, 0.28], resto: [-0.21, 0.22] }, sesgos: { sube: -0.03, baja: 0.08, resto: 0.05 } },
   },
   {
     horizonte: 7,
@@ -311,6 +350,7 @@ export const MODELOS_MEDIO: ModeloRio[] = [
     coef: [-0.056921, 0.752537, -0.015369, 0.004766, 0.042659, 0.010126, -0.093609, 0.02497, -0.009814, -0.022613, 0.212606, 0.317814, -0.04186, 0.000471, -0.001701, -0.024307, 0.145469, 0.137558],
     mae: 0.09,
     medio: true,
+    auto: { coef: [-0.058029, 0.826745, -0.008719, -0.001209, 0.030786, 0.010177, -0.057558, 0.024871, -0.016702, -0.01925, 0.135816, 0.189813, -0.034465, 0.008399, -0.003862, -0.015899, 0.123231, 0.126756, 0.848574], mae: 0.075, bandas: { sube: [-0.12, 0.1], baja: [-0.1, 0.13], resto: [-0.13, 0.12] }, sesgos: { sube: 0, baja: 0.02, resto: 0.02 } },
   },
   {
     horizonte: 5,
@@ -318,6 +358,7 @@ export const MODELOS_MEDIO: ModeloRio[] = [
     coef: [-0.127893, 0.665138, -0.007469, 0.008402, 0.039265, 0.038659, -0.07631, 0.022695, -0.053269, 0.004492, 0.22602, 0.408555, -0.066566, 0.193589, 0.063909, 0.004397, 0.210338, 0.093013],
     mae: 0.113,
     medio: true,
+    auto: { coef: [-0.129431, 0.726911, -0.006277, 0.004152, 0.028945, 0.045754, -0.041498, 0.002561, -0.063262, 0.013535, 0.162725, 0.29583, -0.060104, 0.187723, 0.068236, 0.006785, 0.19062, 0.093135, 0.700495], mae: 0.106, bandas: { sube: [-0.19, 0.1], baja: [-0.12, 0.21], resto: [-0.19, 0.15] }, sesgos: { sube: -0.04, baja: 0.05, resto: 0.01 } },
   },
   {
     horizonte: 7,
@@ -374,6 +415,8 @@ export interface Punto {
   /** Banda de error medida para ese horizonte y ese régimen, en metros. */
   min: number;
   max: number;
+  /** Qué variante salió: con lluvia, con Yacyretá, con el automático o la base. Para guardar el histórico. */
+  modelo?: 'base' | 'medio' | 'lluvia' | 'lluvia-medio' | 'represa' | 'base-auto' | 'medio-auto';
 }
 
 /**
@@ -412,8 +455,7 @@ const enDia = (s: Observacion[], dia: string) => s.find((o) => o.dia === dia)?.m
  * Sin régimen (falta Corrientes), la más ancha de las tres: no saber cómo
  * viene el río arriba no es motivo para achicar el margen.
  */
-function banda(m: ModeloRio, r: Regimen | null): [number, number] {
-  const b = tablas(m).bandas[m.horizonte];
+function banda(b: Record<Regimen, [number, number]>, r: Regimen | null): [number, number] {
   if (r) return [-b[r][1], -b[r][0]];
   return [-Math.max(...REGIMENES.map((k) => b[k][1])), -Math.min(...REGIMENES.map((k) => b[k][0]))];
 }
@@ -569,13 +611,26 @@ export function predecir(
   m: ModeloRio,
   lluvia?: LluviaTramo | null,
 ): Punto | null {
-  const crudo = regresion(series, hoy, m, lluvia);
-  if (crudo === null) return null;
+  const base = regresion(series, hoy, m, lluvia);
+  if (base === null) return null;
   const regimen = regimenCorrientes(series.corrientes ?? [], hoy);
-  const b = banda(m, regimen);
-  const metros = crudo - (regimen && corregir(series.corrientes ?? [], hoy, regimen) ? tablas(m).sesgos[m.horizonte][regimen] : 0);
+  // Con automático, la variante que lo usa, con sus bandas y sesgos.
+  const x = m.auto ? predictores(series, hoy, m, lluvia) : null;
+  const delta = m.auto ? cambioAutomatico(series, hoy) : null;
+  const auto = m.auto && x && delta !== null ? m.auto : null;
+  const crudo = auto ? [...x!, delta!].reduce((a, v, i) => a + v * auto.coef[i], 0) : base;
+  const t = auto ? { bandas: { [m.horizonte]: auto.bandas }, sesgos: { [m.horizonte]: auto.sesgos } } : tablas(m);
+  const b = banda(t.bandas[m.horizonte], regimen);
+  const metros = crudo - (regimen && corregir(series.corrientes ?? [], hoy, regimen) ? t.sesgos[m.horizonte][regimen] : 0);
   const r = (v: number) => Number(v.toFixed(2));
-  return { dia: menosDias(hoy, 1 - m.horizonte), metros: r(metros), min: r(crudo + b[0]), max: r(crudo + b[1]) };
+  const nombre = m.represa ? 'represa' : m.lluvia ? (m.medio ? 'lluvia-medio' : 'lluvia') : m.medio ? 'medio' : 'base';
+  return {
+    dia: menosDias(hoy, 1 - m.horizonte),
+    metros: r(metros),
+    min: r(crudo + b[0]),
+    max: r(crudo + b[1]),
+    modelo: auto ? (`${nombre}-auto` as 'base-auto' | 'medio-auto') : nombre,
+  };
 }
 
 /**
