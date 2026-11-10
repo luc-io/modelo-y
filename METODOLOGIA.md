@@ -350,6 +350,20 @@ Se eligió la mezcla porque gana donde se eligió el peso sin sobreajustar y no 
 
 **Qué más se probó** (`npm run prueba-pico`): predictores de «el pico ya pasó», sumados a la regresión de las cinco: cuánto bajó cada estación desde su máximo de los últimos 20 días, el cambio de Corrientes en 10 días, el de Rosario en 7, y la altura de Corrientes al cuadrado. A 14 y 17 días, ninguno mejora más de 2 % fuera de muestra, y no entran. En las crecidas parecidas a la de noviembre de 2026 (2013, 2014, 2023) Rosario siguió subiendo unos 60 cm en dos semanas, como dice el modelo. Tampoco sirvió no descontar la corrección «baja» cuando Rosario sube: empeora.
 
+### 4.10 El cuadro de Prefectura del día
+
+La serie del INA copia el cuadro de Prefectura con un día de atraso, y el modelo corría con lecturas un día más viejas de las que ya estaban publicadas. El 10 de noviembre de 2026, en plena crecida, usaba Rosario en 4,22 m y Paraná en 5,05 cuando el cuadro decía 4,30 y 5,20, y venía quedándose 11 cm corto a uno y dos días.
+
+Desde ese día, antes de correr se le agrega a cada serie la lectura del cuadro (`conCuadro`). Los coeficientes, las bandas y los sesgos no cambian: es el mismo modelo corrido un día después, así que cada fecha se pronostica con un día menos de anticipación. Para una misma fecha, con todas las estaciones un día más nuevas (2022-2026, modelos sin lluvia ajustados en 2005-2021):
+
+| Plazo | 3 d | 5 d | 7 d | 10 d | 14 d |
+|---|---|---|---|---|---|
+| Cambio en el error | −15 % | −13 % | −11 % | −16 % | −9 % |
+
+Sólo se usa si el cuadro es del día siguiente al último de la serie y trae a Rosario y a las cinco estaciones; si no, corre con las series como vienen. Yacyretá no está en el cuadro y repite su último dato: su cambio en 3 días queda medido en 2, y con ECMWF desde 2024 la regresión pasa de 0,215 a 0,220 m a 14 días y de 0,265 a 0,272 a 17.
+
+En la misma tanda se probó, sin mejora (entre 0 y −2 %): la tendencia propia de Rosario en 1, 3 y 7 días; corregir con el error del pronóstico emitido antes para el mismo plazo; sumar Diamante y Santa Fe; y el cambio en un día de las estaciones de arriba. Los cuadrados de las alturas de Rosario, Paraná y Corrientes dieron entre −2 y −6 % y quedan para un reajuste.
+
 ## 5. Limitaciones conocidas
 
 - **Horizonte de 17 días:** las estaciones llegan a 14 y lo que suelta Yacyretá lo estira tres días más; a 21 días la banda ya es de un metro.
@@ -358,6 +372,7 @@ Se eligió la mezcla porque gana donde se eligió el peso sin sobreajustar y no 
 - **Represas:** lo que se suelta en Brasil se ve recién cuando pasa por Yacyretá. Itaipú no agregó nada medible.
 - **Puntos fijos para la lluvia:** no son cuencas delimitadas ni ponderadas por área.
 - **Altura, no caudal:** el modelo trabaja sobre alturas de escala, no sobre caudales.
+- **Lectura del mediodía:** Prefectura lee dos veces por día; a la tarde el cuadro trae la de las 12 y el modelo la toma como la de la mañana siguiente. No está medido cuánto pesa.
 
 ## 6. Preguntas abiertas
 
