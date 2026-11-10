@@ -364,6 +364,23 @@ Sólo se usa si el cuadro es del día siguiente al último de la serie y trae a 
 
 En la misma tanda se probó, sin mejora (entre 0 y −2 %): la tendencia propia de Rosario en 1, 3 y 7 días; corregir con el error del pronóstico emitido antes para el mismo plazo; sumar Diamante y Santa Fe; y el cambio en un día de las estaciones de arriba. Los cuadrados de las alturas de Rosario, Paraná y Corrientes dieron entre −2 y −6 % y quedan para un reajuste.
 
+### 4.11 Rosario desde el hidrómetro automático, a 3 y 5 días
+
+El cuadro de Prefectura con que corre el modelo es la lectura de la mañana anterior. El INA tiene en Rosario un hidrómetro automático (serie 29435, red SAT) que informa cada hora, un kilómetro aguas abajo de la escala y unos 5 cm por debajo. La variante nueva suma un predictor: cuánto cambió el automático entre las 8 de ayer y las 8 de hoy. Como es una diferencia, la escala no importa.
+
+El automático empieza en julio de 2020, así que el ajuste (2005-2021) usa el mismo cambio leído en la serie de Prefectura un día después, que es la lectura de esa mañana: contra el automático, correlación 0,76 y 3,6 cm de diferencia media. El error, las bandas y los sesgos se midieron en 2022-2026 con el automático de verdad (`npm run ajuste-auto`):
+
+| Días | Modelo | n | Error sin | Error con | Cambio | Banda 80 % |
+|---|---|---|---|---|---|---|
+| 3 | con las del medio | 1305 | 0,088 | 0,075 | −15 % | 27 → 24 cm |
+| 5 | con las del medio | 1303 | 0,114 | 0,106 | −7 % | 36 → 33 cm |
+| 3 | cinco estaciones | 1332 | 0,097 | 0,082 | −15 % | 28 → 24 cm |
+| 5 | cinco estaciones | 1330 | 0,138 | 0,130 | −6 % | 42 → 40 cm |
+
+El coeficiente del cambio es 0,85 a 3 días y 0,70 a 5. Sin automático, o con un salto de más de 60 cm en un día, sale el modelo sin él.
+
+Quedó afuera: a 7 días mejora 2 % y desde 10 nada; y el mismo predictor con los automáticos de Paraná (29440) y La Paz (32631) dio entre 0 y +2 %.
+
 ## 5. Limitaciones conocidas
 
 - **Horizonte de 17 días:** las estaciones llegan a 14 y lo que suelta Yacyretá lo estira tres días más; a 21 días la banda ya es de un metro.
