@@ -665,3 +665,69 @@ function topeCrecida(series: Record<string, Observacion[]>, hoy: string, horizon
     puntos[i] = { ...p, metros: r(techo), min: r(p.min - baja), max: r(p.max - baja) };
   });
 }
+
+/** El cuadro de Prefectura del día: su fecha y la altura de cada estación, por slug. */
+export interface CuadroDelDia {
+  fecha: string | null;
+  alturas: Record<string, number | null | undefined>;
+}
+
+/**
+ * Las series con la lectura del cuadro de Prefectura del día agregada al
+ * final. La serie histórica del INA copia ese cuadro con un día de atraso, y
+ * el modelo corría con lecturas un día más viejas de las que la página ya
+ * mostraba: el 10/11/2026, en plena crecida, usaba Rosario en 4,22 m y Paraná
+ * en 5,05 cuando el cuadro decía 4,30 y 5,20, y venía quedándose 11 cm corto
+ * a uno y dos días. Con todas las estaciones un día más nuevas, el error para
+ * una misma fecha baja 15 % a 3 días, 13 % a 5, 11 % a 7, 16 % a 10 y 9 % a
+ * 14 (2022-2026, modelos sin lluvia ajustados en 2005-2021). Los
+ * coeficientes no cambian: es el mismo modelo corrido un día después.
+ *
+ * Sólo si el cuadro es del día siguiente al último de Rosario y trae a
+ * Rosario y a las cinco de `ESTACIONES_Y`; si no, las series como vienen: un
+ * hueco de un día o una estación sin lectura dejarían horizontes sin
+ * calcular. Las del medio se agregan si están; sin alguna, ese día sale el
+ * modelo de las cinco.
+ *
+ * Yacyretá no está en el cuadro: se repite su último dato. El modelo usa su
+ * cambio en 3 días, que así queda medido en 2, y eso cuesta menos de lo que
+ * da el día ganado: con ECMWF desde 2024 la regresión pasa de 0,215 a 0,220 m
+ * a 14 días y de 0,265 a 0,272 a 17 (2-3 %).
+ */
+export function conCuadro(series: Record<string, Observacion[]>, cuadro: CuadroDelDia): Record<string, Observacion[]> {
+  const ultimo = series.rosario?.at(-1)?.dia;
+  if (!ultimo || cuadro.fecha !== menosDias(ultimo, -1)) return series;
+  const fecha = cuadro.fecha;
+  const altura = (k: string) => {
+    const v = cuadro.alturas[k];
+    return typeof v === 'number' && Number.isFinite(v) ? v : null;
+  };
+  if (['rosario', ...ESTACIONES_Y].some((k) => altura(k) === null || series[k]?.at(-1)?.dia !== ultimo)) return series;
+  const out: Record<string, Observacion[]> = {};
+  for (const [k, s] of Object.entries(series)) {
+    const fin = s.at(-1);
+    const metros = k === 'yacyreta' ? (fin?.metros ?? null) : altura(k);
+    out[k] = fin?.dia === ultimo && metros !== null ? [...s, { dia: fecha, metros }] : s;
+  }
+  return out;
+}
+
+/**
+ * El escenario de hoy con el cuadro del día (`conCuadro`), y el día desde el
+ * que corrió. Si con el cuadro salen menos horizontes que sin él, el de las
+ * series solas: un día más nuevo no vale perder un plazo.
+ */
+export function pronosticarAlDia(
+  series: Record<string, Observacion[]>,
+  cuadro: CuadroDelDia | null,
+  lluvia?: LluviaTramo | null,
+): { hoy: string; puntos: Punto[] } {
+  const ultimo = series.rosario?.at(-1)?.dia;
+  if (!ultimo) return { hoy: '', puntos: [] };
+  const base = { hoy: ultimo, puntos: pronosticar(series, ultimo, lluvia) };
+  const nuevas = cuadro ? conCuadro(series, cuadro) : series;
+  if (nuevas === series) return base;
+  const hoy = nuevas.rosario.at(-1)!.dia;
+  const puntos = pronosticar(nuevas, hoy, lluvia);
+  return puntos.length >= base.puntos.length ? { hoy, puntos } : base;
+}
