@@ -18,6 +18,7 @@
     "estaciones-medias": "tsx scripts/prueba-estaciones-medias.ts",
     "ajuste-modelo-y": "tsx scripts/ajuste-modelo-y.ts",
     "ajuste-auto": "tsx scripts/ajuste-auto-rio.ts",
+    "ajuste-correccion": "tsx scripts/ajuste-correccion-rio.ts",
     "prueba-pico": "tsx scripts/prueba-pico.ts"
   },
   "devDependencies": {

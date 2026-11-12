@@ -211,7 +211,7 @@ export const MODELOS: ModeloRio[] = [
  * y 5 días no mejora: el agua de los afluentes todavía no llegó. Ajustados con
  * 2005-2021 usando la lluvia que cayó (ERA5) y medidos con lo que de verdad
  * se pronosticaba (ECMWF, febrero de 2024 en adelante), con
- * `npm run ajuste-lluvia-rio`.
+ * `npm run ajuste-lluvia`.
  */
 export const MODELOS_LLUVIA: ModeloRio[] = [
   {
@@ -244,7 +244,7 @@ export const MODELOS_LLUVIA: ModeloRio[] = [
  * Con la lluvia del tramo y Yacyretá: 14 días, y 17, que sin Yacyretá no se
  * puede. A 7 y 10 días Yacyretá no mejora de forma pareja entre períodos, así
  * que ahí queda sólo la lluvia. Ajustados y medidos como `MODELOS_LLUVIA`,
- * con `npm run ajuste-lluvia-rio`. A 17 días ninguna estación alcanza: usa
+ * con `npm run ajuste-lluvia`. A 17 días ninguna estación alcanza: usa
  * Corrientes de hoy.
  */
 export const MODELOS_REPRESA: ModeloRio[] = [
@@ -396,6 +396,51 @@ export const SESGOS_MEDIO: Record<number, Record<Regimen, number>> = {
   10: { sube: -0.04, baja: 0.02, resto: 0 },
 };
 
+/**
+ * Bandas y sesgos de `MODELOS_MEDIO` con la corrección no lineal sumada
+ * (`correccion-rio.ts`), medidos como los de `BANDAS_MEDIO`: 3 y 5 días en
+ * 2022-2026, 7 y 10 con ECMWF desde 2024-02-15, con los árboles ajustados en
+ * 2005-2021 (`npm run ajuste-correccion`). Con la corrección lo publicado
+ * erra 5 % menos a 3 días (0,087 → 0,082 m), 11 % a 5 (0,109 → 0,097), 9 % a
+ * 7 (0,127 → 0,115) y 8 % a 10 (0,168 → 0,155), y las bandas se angostan 2 a
+ * 6 cm cubriendo lo mismo. Ajustando con 2005-2015 y midiendo en 2016-2021:
+ * −4 %, −8 %, −8 % y 0 %. Los sesgos por régimen quedan en 0-4 cm: la
+ * corrección ya ve cómo viene Corrientes.
+ */
+export const BANDAS_CORREGIDO: Record<number, Record<Regimen, [number, number]>> = {
+  3: { sube: [-0.12, 0.14], baja: [-0.12, 0.12], resto: [-0.13, 0.13] },
+  5: { sube: [-0.15, 0.14], baja: [-0.15, 0.15], resto: [-0.18, 0.15] },
+  7: { sube: [-0.14, 0.16], baja: [-0.19, 0.21], resto: [-0.14, 0.2] },
+  10: { sube: [-0.16, 0.22], baja: [-0.27, 0.23], resto: [-0.26, 0.27] },
+};
+
+/** Como `SESGOS`, para `MODELOS_MEDIO` con la corrección. */
+export const SESGOS_CORREGIDO: Record<number, Record<Regimen, number>> = {
+  3: { sube: 0.04, baja: 0.02, resto: 0.02 },
+  5: { sube: 0.01, baja: 0.02, resto: 0.01 },
+  7: { sube: 0, baja: 0.02, resto: 0.02 },
+  10: { sube: 0.03, baja: -0.02, resto: 0.03 },
+};
+
+/** Error absoluto medio de la regresión de `MODELOS_MEDIO` con la corrección sumada, en los mismos días que `BANDAS_CORREGIDO`. */
+export const MAE_CORREGIDO: Record<number, number> = { 3: 0.085, 5: 0.098, 7: 0.116, 10: 0.157 };
+
+/**
+ * Lo mismo para la variante que arranca del automático de Rosario, a 3 y 5
+ * días, con el automático de verdad en 2022-2026: 0,073 → 0,071 m a 3 días
+ * (−3 %) y 0,103 → 0,093 a 5 (−10 %).
+ */
+export const BANDAS_CORREGIDO_AUTO: Record<number, Record<Regimen, [number, number]>> = {
+  3: { sube: [-0.12, 0.12], baja: [-0.1, 0.1], resto: [-0.14, 0.11] },
+  5: { sube: [-0.15, 0.12], baja: [-0.13, 0.14], resto: [-0.17, 0.13] },
+};
+
+/** Como `SESGOS_CORREGIDO`, con el automático. */
+export const SESGOS_CORREGIDO_AUTO: Record<number, Record<Regimen, number>> = {
+  3: { sube: 0.02, baja: 0.01, resto: 0.01 },
+  5: { sube: 0, baja: 0.02, resto: 0.01 },
+};
+
 /** Las bandas y sesgos que corresponden a un modelo. */
 function tablas(m: ModeloRio) {
   if (m.medio) return { bandas: BANDAS_MEDIO, sesgos: SESGOS_MEDIO };
@@ -403,6 +448,14 @@ function tablas(m: ModeloRio) {
   if (m.lluvia) return { bandas: BANDAS_LLUVIA, sesgos: SESGOS_LLUVIA };
   return { bandas: BANDAS, sesgos: SESGOS };
 }
+
+/**
+ * Lo que la corrección no lineal le suma a la regresión de `MODELOS_MEDIO` a
+ * `horizonte` días, en metros, o null si no hay (ver `correccion-rio.ts`). Se
+ * pasa como argumento y no se importa acá: este archivo lo usan también los
+ * componentes del navegador, que no tienen por qué cargar los árboles.
+ */
+export type Correccion = (series: Record<string, Observacion[]>, hoy: string, horizonte: number) => number | null;
 
 export interface Punto {
   /**
@@ -415,8 +468,8 @@ export interface Punto {
   /** Banda de error medida para ese horizonte y ese régimen, en metros. */
   min: number;
   max: number;
-  /** Qué variante salió: con lluvia, con Yacyretá, con el automático o la base. Para guardar el histórico. */
-  modelo?: 'base' | 'medio' | 'lluvia' | 'lluvia-medio' | 'represa' | 'base-auto' | 'medio-auto';
+  /** Qué variante salió: con lluvia, con Yacyretá, con el automático o la base; «-c» si lleva la corrección no lineal. Para guardar el histórico. */
+  modelo?: 'base' | 'medio' | 'lluvia' | 'lluvia-medio' | 'represa' | 'base-auto' | 'medio-auto' | 'medio-c' | 'lluvia-medio-c' | 'medio-auto-c';
 }
 
 /**
@@ -604,12 +657,17 @@ const corregir = (corrientes: Observacion[], hoy: string, r: Regimen) =>
  * estaba —sale de los mismos errores—; lo que se mueve es el número central
  * adentro de ella. Sin régimen no se corrige: no hay con qué saber para qué
  * lado.
+ *
+ * Con `correccion`, a los modelos del medio se les suma la corrección no
+ * lineal (`correccion-rio.ts`) y van las bandas y sesgos medidos con ella.
+ * Si no hay corrección para ese horizonte o le falta un dato, sale como antes.
  */
 export function predecir(
   series: Record<string, Observacion[]>,
   hoy: string,
   m: ModeloRio,
   lluvia?: LluviaTramo | null,
+  correccion?: Correccion | null,
 ): Punto | null {
   const base = regresion(series, hoy, m, lluvia);
   if (base === null) return null;
@@ -618,18 +676,21 @@ export function predecir(
   const x = m.auto ? predictores(series, hoy, m, lluvia) : null;
   const delta = m.auto ? cambioAutomatico(series, hoy) : null;
   const auto = m.auto && x && delta !== null ? m.auto : null;
-  const crudo = auto ? [...x!, delta!].reduce((a, v, i) => a + v * auto.coef[i], 0) : base;
-  const t = auto ? { bandas: { [m.horizonte]: auto.bandas }, sesgos: { [m.horizonte]: auto.sesgos } } : tablas(m);
-  const b = banda(t.bandas[m.horizonte], regimen);
-  const metros = crudo - (regimen && corregir(series.corrientes ?? [], hoy, regimen) ? t.sesgos[m.horizonte][regimen] : 0);
+  const h = m.horizonte;
+  const medidas = auto ? { bandas: BANDAS_CORREGIDO_AUTO, sesgos: SESGOS_CORREGIDO_AUTO } : { bandas: BANDAS_CORREGIDO, sesgos: SESGOS_CORREGIDO };
+  const suma = m.medio && correccion && medidas.bandas[h] ? correccion(series, hoy, h) : null;
+  const crudo = (auto ? [...x!, delta!].reduce((a, v, i) => a + v * auto.coef[i], 0) : base) + (suma ?? 0);
+  const t = suma !== null ? medidas : auto ? { bandas: { [h]: auto.bandas }, sesgos: { [h]: auto.sesgos } } : tablas(m);
+  const b = banda(t.bandas[h], regimen);
+  const metros = crudo - (regimen && corregir(series.corrientes ?? [], hoy, regimen) ? t.sesgos[h][regimen] : 0);
   const r = (v: number) => Number(v.toFixed(2));
   const nombre = m.represa ? 'represa' : m.lluvia ? (m.medio ? 'lluvia-medio' : 'lluvia') : m.medio ? 'medio' : 'base';
   return {
-    dia: menosDias(hoy, 1 - m.horizonte),
+    dia: menosDias(hoy, 1 - h),
     metros: r(metros),
     min: r(crudo + b[0]),
     max: r(crudo + b[1]),
-    modelo: auto ? (`${nombre}-auto` as 'base-auto' | 'medio-auto') : nombre,
+    modelo: `${nombre}${auto ? '-auto' : ''}${suma !== null ? '-c' : ''}` as Punto['modelo'],
   };
 }
 
@@ -639,7 +700,12 @@ export function predecir(
  * falta Yacyretá, el de lluvia; si falta la lluvia (Open-Meteo no respondió),
  * el de siempre con su banda de siempre, y 17 días no sale.
  */
-export function pronosticar(series: Record<string, Observacion[]>, hoy: string, lluvia?: LluviaTramo | null): Punto[] {
+export function pronosticar(
+  series: Record<string, Observacion[]>,
+  hoy: string,
+  lluvia?: LluviaTramo | null,
+  correccion?: Correccion | null,
+): Punto[] {
   const horizontes = [...new Set([...MODELOS, ...MODELOS_REPRESA].map((m) => m.horizonte))].sort((a, b) => a - b);
   const puntos = horizontes.map((h) => {
     // Del más completo al más simple: si a uno le falta un dato, el siguiente.
@@ -648,7 +714,7 @@ export function pronosticar(series: Record<string, Observacion[]>, hoy: string, 
       ? [MODELOS_REPRESA, MODELOS_MEDIO, MODELOS_LLUVIA, MODELOS].map((ms) => ms.find((x) => x.horizonte === h))
       : [MODELOS_MEDIO.find((x) => x.horizonte === h && !x.lluvia), MODELOS.find((x) => x.horizonte === h)];
     for (const m of candidatos) {
-      const p = m && predecir(series, hoy, m, lluvia);
+      const p = m && predecir(series, hoy, m, lluvia, correccion);
       if (p) return p;
     }
     return null;
@@ -776,13 +842,14 @@ export function pronosticarAlDia(
   series: Record<string, Observacion[]>,
   cuadro: CuadroDelDia | null,
   lluvia?: LluviaTramo | null,
+  correccion?: Correccion | null,
 ): { hoy: string; puntos: Punto[] } {
   const ultimo = series.rosario?.at(-1)?.dia;
   if (!ultimo) return { hoy: '', puntos: [] };
-  const base = { hoy: ultimo, puntos: pronosticar(series, ultimo, lluvia) };
+  const base = { hoy: ultimo, puntos: pronosticar(series, ultimo, lluvia, correccion) };
   const nuevas = cuadro ? conCuadro(series, cuadro) : series;
   if (nuevas === series) return base;
   const hoy = nuevas.rosario.at(-1)!.dia;
-  const puntos = pronosticar(nuevas, hoy, lluvia);
+  const puntos = pronosticar(nuevas, hoy, lluvia, correccion);
   return puntos.length >= base.puntos.length ? { hoy, puntos } : base;
 }

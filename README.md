@@ -13,7 +13,7 @@ Publicamos el código y la metodología para que especialistas en hidrología lo
 ## Cómo funciona, en cinco líneas
 
 1. El agua que va a pasar por Rosario ya está río arriba: Corrientes llega en 14 días, Goya en 11, Reconquista en 10, La Paz en 6 y Paraná en 3.
-2. Para cada plazo (3, 5, 7, 10 y 14 días), una regresión lineal usa la altura de Rosario y el nivel y el cambio en 3 días de las cinco estaciones: las que todavía no mandaron su agua, con su retraso; las que ya la mandaron, con su dato de hoy, que dice si la onda ya pasó. De 3 a 10 días suma Bella Vista, Esquina y Santa Elena. Desde 7 días el número es el promedio con un gemelo que mira sólo cómo vienen cambiando las estaciones, sin sus alturas.
+2. Para cada plazo (3, 5, 7, 10 y 14 días), una regresión lineal usa la altura de Rosario y el nivel y el cambio en 3 días de las cinco estaciones: las que todavía no mandaron su agua, con su retraso; las que ya la mandaron, con su dato de hoy, que dice si la onda ya pasó. De 3 a 10 días suma Bella Vista, Esquina y Santa Elena. Desde 7 días el número es el promedio con un gemelo que mira sólo cómo vienen cambiando las estaciones, sin sus alturas. De 3 a 10 días se le suma una corrección no lineal: 150 árboles de dos preguntas que aprenden lo que la recta deja sin explicar (el río no responde igual bajo que alto).
 3. Desde 7 días suma la lluvia sobre los afluentes del tramo argentino entre Corrientes y Rosario: la de la última semana y la pronosticada por ECMWF.
 4. Desde 14 días suma cuánto cambió en 3 días el caudal que suelta Yacyretá, que pasa por Corrientes días después. Con eso llega a 17 días.
 5. Corrige el número por el sesgo medido según cómo viene Corrientes (subiendo fuerte, bajando o estable); la corrección por subida, sólo la primera semana. Si Corrientes subió más de 1 m en 10 días, a 14 y 17 días no lo deja más de 25 cm arriba del de 10, porque la onda se achata antes de llegar; el tope sigue 7 días después de esa subida, mientras la onda termina de bajar. Lo publica con la banda p10–p90 del error, medida en años que el ajuste no vio.
@@ -35,6 +35,8 @@ Error absoluto medio, fuera de la muestra de ajuste:
 
 Desde el 6/11/2026 cada plazo mira las cinco estaciones, también las que ya mandaron su agua: a 7 días el error bajó 16 % (de 17,6 a 14,7 cm en 2022-2026) y 5-9 % a 10, 14 y 17. Bella Vista, Esquina y Santa Elena lo bajan otro 5 % a 3 días, 13 % a 5, 9 % a 7 y 3 % a 10. La mezcla con variaciones desde 7 días erra 3-7 % menos en 2016-2021 ajustando con 2005-2015; en 2022-2026 empata y con ECMWF pierde 1-2 %. El detalle, en [METODOLOGIA.md](METODOLOGIA.md) §4.7-4.9.
 
+Desde el 12/11/2026, de 3 a 10 días va una corrección no lineal sobre la regresión: lo publicado erra 5 % menos a 3 días, 11 % a 5, 9 % a 7 y 8 % a 10 (2022-2026; 7 y 10 con ECMWF desde 2024), con bandas 2 a 6 cm más angostas. Ajustando con 2005-2015 y midiendo en 2016-2021: −4 %, −8 %, −8 % y 0 %. A 14 y 17 días no mejoraba de forma pareja y quedó afuera. El detalle, en §4.12.
+
 ## Reproducirlo
 
 Hace falta Node 20 o más nuevo. Todos los datos se bajan de fuentes abiertas, sin claves.
@@ -53,6 +55,7 @@ npm run sesgo-sube      # la corrección por subida, sólo la primera semana (de
 npm run estaciones-medias  # Bella Vista, Esquina y Santa Elena, y las cinco en todos los plazos
 npm run ajuste-modelo-y    # reajusta el modelo entero, con bandas, sesgos y la mezcla (después de ajuste-lluvia)
 npm run prueba-pico     # predictores de «el pico ya pasó» a 14 y 17 días
+npm run ajuste-correccion  # la corrección no lineal de 3 a 10 días: ajusta, mide y escribe los árboles (después de ajuste-lluvia, estaciones-medias y ajuste-auto)
 ```
 
 Lo bajado queda en `.cache/`. El código del modelo está en `src/lib/`: `pronostico-rio.ts` (coeficientes, bandas, sesgos y la cuenta), `lluvia-tramo.ts` (puntos del tramo y lluvia típica) y `rio-historia.ts` (estaciones y series del INA).
