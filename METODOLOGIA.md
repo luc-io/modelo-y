@@ -74,6 +74,14 @@ con *s_k* el mismo día que mira la regresión con alturas. El número publicado
 
 Si en vivo falta un dato se usa el modelo más completo que se pueda calcular: con lluvia, Yacyretá, después el de las estaciones del medio, después el de lluvia y por último el de sólo estaciones; sin lluvia, el de las estaciones del medio y después el de las cinco. Una falla del INA en Bella Vista, Esquina o Santa Elena no tira abajo el pronóstico. A 17 días, sin Yacyretá no sale.
 
+**Corrección no lineal, de 3 a 10 días.** A la regresión de `MODELOS_MEDIO` se le suma una segunda cuenta que aprende el error que la primera deja:
+
+```
+H_Rosario(t + h) = regresión(t, h) + Σ_i árbol_i(x(t))        (h = 3, 5, 7, 10)
+```
+
+Cada árbol hace dos preguntas encadenadas sobre *x(t)* («¿Rosario está abajo de 2,05 m?», «¿Corrientes subió más de 3 cm ayer?») y devuelve unos milímetros; son 150 por plazo, ajustados por boosting de gradiente con pérdida cuadrática. *x(t)* son 24 números: la altura de Rosario y de las cinco estaciones como están hoy, y cuánto cambió cada una en 1, 3 y 10 días. No mira la lluvia. Los árboles están en `src/lib/correccion-rio-datos.ts` y la cuenta en `src/lib/correccion-rio.ts`. Con la corrección van bandas y sesgos propios (`BANDAS_CORREGIDO`, `SESGOS_CORREGIDO`). Si falta un dato, o ese día no sale el modelo con las estaciones del medio, el punto sale sin corregir. A 14 y 17 días no hay corrección. Ver §4.12.
+
 **Corrección por régimen.** Se clasifica cada día según cuánto cambió Corrientes en los 10 días previos: *sube* (más de +40 cm), *baja* (menos de −15 cm) o *resto*. La regresión lineal se queda corta con crecidas rápidas y se pasa con bajantes. Por eso al número se le resta la mediana del error medida en cada régimen. La corrección «sube» vale sólo la primera semana de la subida: si Corrientes ya lleva más de 7 días seguidos en *sube* (`SUBE_SEMANA`), no se corrige, porque para entonces la onda ya llegó a las estaciones de abajo y la regresión sola erra poco. La banda no cambia: sale de la regresión sin corregir. Ver §4.6.
 
 **Tope en crecidas rápidas.** Si Corrientes subió más de 1 m en 10 días, a 14 y 17 días el número no queda más de 25 cm por encima del de 10 días, y la banda se corre con él (`TOPE_CRECIDA`). A 14 y 17 días el modelo lee la altura de Corrientes de hoy como si fuera a llegar entera, pero en una crecida rápida la onda se achata en los bañados antes de Rosario. El de 10 días mira Reconquista, que ya la trae achatada. En 2005-2026, los días en que el modelo marcaba un salto de más de 50 cm entre 10 y 14 días, el salto real fue de 13 a 17 cm y el de 14 días se pasaba por 50 a 70 cm. El tope sigue 7 días después de la última vez que Corrientes subió más de 1 m en 10 días (`TOPE_CRECIDA.memoria`): sin eso se apagaba de golpe cuando el comienzo de la subida salía de la ventana de 10 días, con la onda todavía en camino. Hasta el 6/11/2026 iba desde subidas de 1,5 m y dejaba 35 cm. Ver §4.5.
@@ -171,6 +179,26 @@ Banda p10/p90 del error con las del medio (m):
 | 5 | −0,21 / 0,12 | −0,12 / 0,21 | −0,18 / 0,18 |
 | 7 | −0,22 / 0,13 | −0,16 / 0,27 | −0,21 / 0,23 |
 | 10 | −0,27 / 0,19 | −0,21 / 0,32 | −0,32 / 0,25 |
+
+### Con la corrección no lineal
+
+Lo publicado con `MODELOS_MEDIO`, sin y con la corrección, sobre los mismos días (3 y 5 días en 2022-2026; 7 y 10 con lluvia de ECMWF, desde febrero de 2024):
+
+| Plazo | n | Sin corrección | Con corrección | Cambio | Banda | Cubre |
+|---|---|---|---|---|---|---|
+| 3 | 1642 | 0,087 m | 0,082 m | −5 % | 27 → 25 cm | 80 → 79 % |
+| 5 | 1640 | 0,109 m | 0,097 m | −11 % | 34 → 31 cm | 79 → 79 % |
+| 7 | 910 | 0,127 m | 0,115 m | −9 % | 41 → 35 cm | 80 → 79 % |
+| 10 | 904 | 0,168 m | 0,155 m | −8 % | 53 → 48 cm | 79 → 80 % |
+
+Banda p10/p90 del error con la corrección (m):
+
+| Plazo | sube | baja | resto |
+|---|---|---|---|
+| 3 | −0,12 / 0,14 | −0,12 / 0,12 | −0,13 / 0,13 |
+| 5 | −0,15 / 0,14 | −0,15 / 0,15 | −0,18 / 0,15 |
+| 7 | −0,14 / 0,16 | −0,19 / 0,21 | −0,14 / 0,20 |
+| 10 | −0,16 / 0,22 | −0,27 / 0,23 | −0,26 / 0,27 |
 
 ## 4. Lo que se probó
 
@@ -381,10 +409,39 @@ El coeficiente del cambio es 0,85 a 3 días y 0,70 a 5. Sin automático, o con u
 
 Quedó afuera: a 7 días mejora 2 % y desde 10 nada; y el mismo predictor con los automáticos de Paraná (29440) y La Paz (32631) dio entre 0 y +2 %.
 
+### 4.12 Corrección no lineal, de 3 a 10 días
+
+La regresión es una sola recta para todo el río. Dos cosas se le escapan. El río no responde igual bajo que alto: con Rosario en 1 m una onda llega antes y casi entera; con Rosario en 4 m se demora y se achata en las islas. Y cada plazo mira las estaciones de arriba con el retraso de su agua (a 10 días, Corrientes de hace 4) y no ve lo que hicieron ayer.
+
+Para medir cuánto había para ganar se ajustó un modelo de árboles sobre el error de la regresión, con Rosario y las estaciones como están hoy. Lo que más usa es la altura de Rosario, en todos los plazos; después los cambios de Paraná en 3 y 10 días y el de Rosario en 3 (a 3 y 5 días), la altura de Corrientes (a 5 y 7) y el cambio de Corrientes en un día (a 10). Árboles de dos preguntas rinden lo mismo que los de cuatro niveles, y las cinco estaciones lo mismo que las ocho, así que quedó lo más chico: 150 árboles de dos preguntas por plazo, paso 0,1, hojas de 60 días o más (`npm run ajuste-correccion`, que trae su propio boosting, sin dependencias).
+
+Dos mediciones, las dos fuera de muestra. La regresión sola, sin y con la corrección:
+
+| Plazo | Ajuste 2005-2015, medición 2016-2021 | Ajuste 2005-2021, medición 2022-2026 (7 y 10: ECMWF desde 2024) |
+|---|---|---|
+| 3 | 0,073 → 0,070 m (−4 %) | 0,090 → 0,085 m (−5 %) |
+| 5 | 0,094 → 0,086 m (−8 %) | 0,113 → 0,098 m (−13 %) |
+| 7 | 0,108 → 0,099 m (−8 %) | 0,131 → 0,116 m (−11 %) |
+| 10 | 0,140 → 0,140 m (0 %) | 0,169 → 0,157 m (−7 %) |
+
+A 10 días la mejora es menos firme: aparece en 2022-2026 y no en 2016-2021. A 14 y 17 días la misma corrección mejoraba 2 a 5 % en 2022-2026 y empeoraba 5 a 12 % en 2016-2021, y quedó afuera.
+
+Con el hidrómetro automático de Rosario (§4.11), en 2022-2026 con el automático de verdad: lo publicado pasa de 0,073 a 0,071 m a 3 días (−3 %) y de 0,103 a 0,093 a 5 (−10 %).
+
+Con la corrección, los sesgos por régimen quedan entre −2 y +4 cm: ya ve cómo viene Corrientes. Como suma sobre la regresión y cada árbol devuelve un valor acotado, en una crecida que el ajuste no vio no se dispara: a lo sumo deja de corregir (sumando la peor hoja de cada árbol no llega a 1,5 m).
+
+Probado en la misma ronda y descartado:
+
+- Más predictores en la regresión (cambios de Rosario en 1, 3 y 7 días, el de Paraná en 1 día, Diamante, Santa Fe): 0 a 2 %.
+- El error reciente del propio modelo como predictor: 0 a 2 %.
+- Una regresión por tramo de altura de Rosario, o con interacciones con la altura: mejoraba en 2022-2026 y empeoraba en 2014-2021.
+- Reajustar cada año con todo lo anterior en vez de dejar fijo el ajuste 2005-2021: 0,087 contra 0,089 m a 3 días, y parecido en el resto.
+- Uniformar las fechas del INA. La hora con que el INA sella las lecturas cambia según la época (15 UTC en 2005-2012, 07 UTC en 2013-2015, 03 UTC desde 2017, y en Paraná y Corrientes distinto en 2006-2008 y 2010-2012), pero el retardo de cada estación contra Rosario es parejo en todas las épocas, y rearmar las series con una sola convención no mueve el error.
+
 ## 5. Limitaciones conocidas
 
 - **Horizonte de 17 días:** las estaciones llegan a 14 y lo que suelta Yacyretá lo estira tres días más; a 21 días la banda ya es de un metro.
-- **Linealidad:** las crecidas y bajantes rápidas se corrigen con un sesgo por régimen, la mezcla con variaciones y, a 14 y 17 días, un tope; son parches. Un evento sin precedentes en 2005-2021 puede quedar fuera de la banda.
+- **Linealidad:** de 3 a 10 días una corrección de árboles aprende lo que la recta deja (§4.12); a 14 y 17 días las crecidas y bajantes rápidas se corrigen con un sesgo por régimen, la mezcla con variaciones y un tope, que son parches. La corrección es menos legible que un coeficiente: se puede listar en qué se fija, no leer de un vistazo. Un evento sin precedentes en 2005-2021 puede quedar fuera de la banda.
 - **Muestra corta para la lluvia:** la prueba con pronósticos reales cubre 2,6 años de días consecutivos, muy correlacionados entre sí.
 - **Represas:** lo que se suelta en Brasil se ve recién cuando pasa por Yacyretá. Itaipú no agregó nada medible.
 - **Puntos fijos para la lluvia:** no son cuencas delimitadas ni ponderadas por área.
